@@ -34,8 +34,12 @@ shelf(
   tidyverse, lubridate)
 
 # paths & variables
-# on Ben's laptop Gdrive path
-dir_data <- "/Volumes/GoogleDrive/My Drive/projects/mbon-p2p/data/rocky/MARINe/robomusseldata20201030"
+dir_data <- case_when(
+  Sys.info()[["user"]],
+  "bbest"       <- "/Users/bbest/Downloads/robomusseldata20201030",
+    # on Ben's laptop Gdrive path
+    # "/Volumes/GoogleDrive/My Drive/projects/mbon-p2p/data/rocky/MARINe/robomusseldata20201030",
+  "cdobbelaere" <- "/Users/cdobbelaere/Documents/project/robomusseldata20201030")
 
 # TODO: iterate over files in dir_data
 
