@@ -34,12 +34,12 @@ shelf(
   tidyverse, lubridate)
 
 # paths & variables
+user <- Sys.info()[["user"]]
 dir_data <- case_when(
-  Sys.info()[["user"]],
-  "bbest"       <- "/Users/bbest/Downloads/robomusseldata20201030",
+  user == "bbest"       ~ "/Users/bbest/Downloads/robomusseldata20201030",
     # on Ben's laptop Gdrive path
     # "/Volumes/GoogleDrive/My Drive/projects/mbon-p2p/data/rocky/MARINe/robomusseldata20201030",
-  "cdobbelaere" <- "/Users/cdobbelaere/Documents/project/robomusseldata20201030")
+  user == "cdobbelaere" ~ "/Users/cdobbelaere/Documents/project/robomusseldata20201030")
 
 # TODO: iterate over files in dir_data
 
@@ -47,14 +47,14 @@ dir_data <- case_when(
 tsv <- file.path(dir_data, "BMRMUSCABD3_2012.txt")
 
 # read data from 
-d <- read_tsv(tsv)
+d <- read_tsv(tsv) %>% 
+  mutate(
+    time = parse_date_time(d$Time_GMT, "m/d/y H:M")) %>% 
+  select(-Time_GMT) %>% 
+  arrange(time) # d
 
 # convert to eXtensible Time Series for dygraph
-x <- d %>%
-  select(-Time_GMT) %>% 
-  mutate(
-    time = parse_date_time(d$Time_GMT, "m/d/y H:M")) %>%
-  arrange(time)
+x <- d 
 x <- xts(select(x, -time), order.by=x$time)
 
 # output dygraph interactive plot
