@@ -31,31 +31,33 @@ shelf(
   # time-series
   dygraphs, xts,
   # tidyverse
-  tidyverse, lubridate)
+  tidyverse, lubridate,
+  caTools)
 
 # paths & variables
 user <- Sys.info()[["user"]]
+# set dir_data as filepath for robomussels data 
 dir_data <- case_when(
   user == "bbest"       ~ "/Users/bbest/Downloads/robomusseldata20201030",
     # on Ben's laptop Gdrive path
     # "/Volumes/GoogleDrive/My Drive/projects/mbon-p2p/data/rocky/MARINe/robomusseldata20201030",
-  user == "cdobbelaere" ~ "/Users/cdobbelaere/Documents/project/robomusseldata20201030")
+  user == "cdobbelaere" ~ "/Users/cdobbelaere/Documents/robomussels/robomusseldata20201030")
 
 # TODO: iterate over files in dir_data
 
 # path individual tab-seperated value (*.tsv) file
 tsv <- file.path(dir_data, "BMRMUSCABD3_2012.txt")
 
-# read data from 
+# read data from individual tsv files
 d <- read_tsv(tsv) %>% 
   mutate(
-    time = parse_date_time(d$Time_GMT, "m/d/y H:M")) %>% 
-  select(-Time_GMT) %>% 
-  arrange(time) # d
+    time = parse_date_time(d$Time_GMT, "m/d/y H:M")) %>% # parse through datetimes, store as time col.
+  select(-Time_GMT) %>% # get rid of original time column
+  arrange(time) # d # sort by ascending time 
 
 # convert to eXtensible Time Series for dygraph
 x <- d 
-x <- xts(select(x, -time), order.by=x$time)
+x <- xts(select(x, -time), order.by=x$time) # select only Temp_C and order by time, store as xts object 
 
 # output dygraph interactive plot
 dygraph(x, main="Temp_C") %>%
@@ -63,6 +65,108 @@ dygraph(x, main="Temp_C") %>%
     colors = "red",
     fillGraph = TRUE, fillAlpha = 0.4) %>% 
   dyRangeSelector()
+```
+
+# Smoothing
+
+## 1. Hourly mean (from every 10 min)
+
+```{r}
+# create df containing hourly mean temp data
+d_hourlymean <- d %>% 
+  mutate(time = floor_date(time, unit = "hour")) %>% # round each time down to the nearest hourly boundary 
+  # (could alternatively round up with ceiling_date() or round to nearest values with round_date())
+  group_by(time) %>% # group by hour
+  summarize(Temp_C_hourly_mean = mean(Temp_C)) # calculate mean for each hour
+
+# convert to xts for dygraph
+x_hourlymean <- d_hourlymean
+x_hourlymean <- xts(select(x_hourlymean, -time), order.by=x_hourlymean$time) 
+
+# output dygraph interactive plot
+dygraph(x_hourlymean, main="Hourly_Mean_Temp_C") %>%
+  dyOptions(
+    colors = "red",
+    fillGraph = TRUE, fillAlpha = 0.4) %>% 
+  dyRangeSelector()
+  
+```
+
+## 2. Min/max over 6 hr moving window
+(note: can do rolling averages directly in dygraphs too with dygraph() %>% dyRoller(rollPeriod = 6)
+
+```{r}
+# 6 hour moving average, using hourly averages from earlier
+d_movingwindow <- d_hourlymean %>% 
+  mutate(
+    # min for 6 hr moving window, based on hourly mean
+    Temp_C_min_06_hours  = runmin(Temp_C_hourly_mean,  k=6, alg="C", endrule="constant", align="center"),
+    # mean for 6 hr moving window, based on hourly mean
+    Temp_C_mean_06_hours = runmean(Temp_C_hourly_mean, k=6, alg="C", endrule="constant", align="center"),
+    # max for 6 hr moving window, based on hourly mean
+    Temp_C_max_06_hours  = runmax(Temp_C_hourly_mean,  k=6, alg="C", endrule="constant", align="center")
+    ) %>% 
+  select(-Temp_C_hourly_mean)
+  
+# convert to xts  
+x_movingwindow <- xts(select(d_movingwindow_mean, -time), order.by=d_movingwindow_mean$time) 
+
+# output dygraph plot
+dygraph(x_movingwindow, main="Temp_C") %>%
+  dySeries(
+    c("Temp_C_min_06_hours",
+      "Temp_C_mean_06_hours",
+      "Temp_C_max_06_hours"),
+    label = "Temp (ºC) over 6 hour moving window",
+    color = "orangered") %>% 
+  dyOptions(
+    #colors = c("orange", "orangered", "red"),
+    fillGraph = TRUE, fillAlpha = 0.4) %>% 
+  dyRangeSelector() 
+
+# is there a way to display min/max data labels when using min/max as upper/lower bars?
+
+```
+
+```{r}
+# alternative: moving min and max using original 
+# but this doesn't reduce amount of data so not ideal
+d_movingwindow_orig <- d %>% 
+  mutate(time = floor_date(time, unit = "hour")) %>% 
+  mutate(
+    Temp_C_min_06_hours  = runmin(Temp_C,  k=6, alg="C", endrule="constant", align="center"),
+    Temp_C_max_06_hours  = runmax(Temp_C,  k=6, alg="C", endrule="constant", align="center"),
+    Temp_C_mean_06_hours = runmean(Temp_C, k=6, alg="C", endrule="constant", align="center")
+    ) %>% 
+  select(-Temp_C)
+  #group_by(time) %>% 
+  #mutate(Temp_C_hourly_mean = mean(Temp_C)) %>% 
+  #ungroup()
+
+x_movingwindow_orig <- xts(select(d_movingwindow_orig, -time), order.by=d_movingwindow_orig$time) 
+View(x_movingwindow_orig)
+
+# output dygraph interactive plot
+# ideally would like to plot the means with fill but plot the mins and maxes just with line
+dygraph(x_movingwindow_orig, main="Temp_C") %>%
+  dySeries(
+    c("Temp_C_min_06_hours",
+      "Temp_C_mean_06_hours",
+      "Temp_C_max_06_hours"),
+    label = "Temp (ºC) over 6 hour moving window",
+    color = "orangered") %>% 
+  dyOptions(
+    #colors = c("orange", "orangered", "red"),
+    fillGraph = TRUE, fillAlpha = 0.4) %>% 
+  dyRangeSelector() 
+
+```
+
+## 3. Min/max over day
+
+First find points of inflection to break up day. Possibly averaging around 3 points of max in case anomalous 
+```{r}
+
 ```
 
 
