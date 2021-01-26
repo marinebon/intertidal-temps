@@ -49,6 +49,7 @@ stopifnot(any(dir.exists(c(dir_data, dir_avg))))
 tsv              <- file.path(dir_data, "BMRMUSCABD3_2012.txt")
 csv_hourlymean   <- glue("{dir_avg}/{basename(path_ext_remove(tsv))}_hourlymean.csv")
 csv_movingwindow <- glue("{dir_avg}/{basename(path_ext_remove(tsv))}_movingwindow.csv")
+csv_dailyavg     <- glue("{dir_avg}/{basename(path_ext_remove(tsv))}_dailyavg.csv")
 
 stopifnot(file.exists(tsv))
 
@@ -174,8 +175,41 @@ dygraph(x_movingwindow_orig, main="Temp_C") %>%
 ## 3. Min/max over day
 
 First find points of inflection to break up day. Possibly averaging around 3 points of max in case anomalous 
+
 ```{r}
+d_dailyavg <- d %>% 
+  mutate(
+    day = floor_date(time, unit = "day")) %>%
+  group_by(day) %>%
+  summarize(
+    temp_c_avg = mean(Temp_C),
+    temp_c_min = min(Temp_C),
+    temp_c_max = max(Temp_C))
 
+# show file size difference from original
+write_csv(d_dailyavg, csv_dailyavg)
+file_size(c(tsv, csv_dailyavg))
+
+# convert to xts for dygraph
+x_dailyavg <- d_dailyavg
+x_dailyavg <- xts(select(x_dailyavg, -day), order.by=x_dailyavg$day) 
+
+# output dygraph interactive plot
+dygraph(x_dailyavg, main="Daily Temperature (ºC)") %>%
+  dyOptions(
+    colors = "red",
+    fillGraph = TRUE, fillAlpha = 0.4) %>% 
+  dyRangeSelector()
+
+dygraph(x_dailyavg, main="Daily Temperature (ºC)") %>%
+  dySeries(
+    c("temp_c_min",
+      "temp_c_avg",
+      "temp_c_max"),
+    label = "Daily Temperature (ºC)",
+    color = "orangered") %>% 
+  dyOptions(
+    fillGraph = FALSE, fillAlpha = 0.4) %>%
+  dyRangeSelector() 
 ```
-
 
