@@ -29,29 +29,33 @@ if (!require(librarian)){
 }
 shelf(
   # time-series
-  dygraphs, xts,
+  caTools, dygraphs, xts,
   # tidyverse
-  tidyverse, lubridate,
-  caTools)
+  fs, glue, lubridate, tidyverse)
 
 # paths & variables
 user <- Sys.info()[["user"]]
 # set dir_data as filepath for robomussels data 
 dir_data <- case_when(
-  user == "bbest"       ~ "/Users/bbest/Downloads/robomusseldata20201030",
-    # on Ben's laptop Gdrive path
-    # "/Volumes/GoogleDrive/My Drive/projects/mbon-p2p/data/rocky/MARINe/robomusseldata20201030",
+  #user == "bbest"       ~ "/Users/bbest/Downloads/robomusseldata20201030",
+  user == "bbest"       ~ "/Volumes/GoogleDrive/My Drive/projects/mbon-p2p/data/rocky/MARINe/robomusseldata20201030",
   user == "cdobbelaere" ~ "/Users/cdobbelaere/Documents/robomussels/robomusseldata20201030")
+dir_avg <- file.path(dirname(dir_data), "robomusseldata20201030_avg")
+stopifnot(any(dir.exists(c(dir_data, dir_avg))))
 
 # TODO: iterate over files in dir_data
 
 # path individual tab-seperated value (*.tsv) file
-tsv <- file.path(dir_data, "BMRMUSCABD3_2012.txt")
+tsv              <- file.path(dir_data, "BMRMUSCABD3_2012.txt")
+csv_hourlymean   <- glue("{dir_avg}/{basename(path_ext_remove(tsv))}_hourlymean.csv")
+csv_movingwindow <- glue("{dir_avg}/{basename(path_ext_remove(tsv))}_movingwindow.csv")
+
+stopifnot(file.exists(tsv))
 
 # read data from individual tsv files
 d <- read_tsv(tsv) %>% 
   mutate(
-    time = parse_date_time(d$Time_GMT, "m/d/y H:M")) %>% # parse through datetimes, store as time col.
+    time = parse_date_time(Time_GMT, "m/d/y H:M")) %>% # parse through datetimes, store as time col.
   select(-Time_GMT) %>% # get rid of original time column
   arrange(time) # d # sort by ascending time 
 
@@ -79,6 +83,10 @@ d_hourlymean <- d %>%
   group_by(time) %>% # group by hour
   summarize(Temp_C_hourly_mean = mean(Temp_C)) # calculate mean for each hour
 
+# show file size difference from original
+write_csv(d_hourlymean, csv_hourlymean)
+file_size(c(tsv, csv_hourlymean))
+
 # convert to xts for dygraph
 x_hourlymean <- d_hourlymean
 x_hourlymean <- xts(select(x_hourlymean, -time), order.by=x_hourlymean$time) 
@@ -89,7 +97,6 @@ dygraph(x_hourlymean, main="Hourly_Mean_Temp_C") %>%
     colors = "red",
     fillGraph = TRUE, fillAlpha = 0.4) %>% 
   dyRangeSelector()
-  
 ```
 
 ## 2. Min/max over 6 hr moving window
@@ -108,8 +115,12 @@ d_movingwindow <- d_hourlymean %>%
     ) %>% 
   select(-Temp_C_hourly_mean)
   
+# show file size difference from original
+write_csv(d_movingwindow, csv_movingwindow)
+file_size(c(tsv, csv_movingwindow))
+
 # convert to xts  
-x_movingwindow <- xts(select(d_movingwindow_mean, -time), order.by=d_movingwindow_mean$time) 
+x_movingwindow <- xts(select(d_movingwindow, -time), order.by=d_movingwindow$time) 
 
 # output dygraph plot
 dygraph(x_movingwindow, main="Temp_C") %>%
@@ -125,7 +136,6 @@ dygraph(x_movingwindow, main="Temp_C") %>%
   dyRangeSelector() 
 
 # is there a way to display min/max data labels when using min/max as upper/lower bars?
-
 ```
 
 ```{r}
@@ -143,8 +153,7 @@ d_movingwindow_orig <- d %>%
   #mutate(Temp_C_hourly_mean = mean(Temp_C)) %>% 
   #ungroup()
 
-x_movingwindow_orig <- xts(select(d_movingwindow_orig, -time), order.by=d_movingwindow_orig$time) 
-View(x_movingwindow_orig)
+x_movingwindow_orig <- xts(select(d_movingwindow_orig, -time), order.by=d_movingwindow_orig$time) # View(x_movingwindow_orig)
 
 # output dygraph interactive plot
 # ideally would like to plot the means with fill but plot the mins and maxes just with line
