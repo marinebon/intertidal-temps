@@ -121,7 +121,7 @@ dygraph(x_movingwindow, main="Temp_C") %>%
     color = "orangered") %>% 
   dyOptions(
     #colors = c("orange", "orangered", "red"),
-    fillGraph = TRUE, fillAlpha = 0.4) %>% 
+    fillGraph = FALSE, fillAlpha = 0.4) %>% 
   dyRangeSelector() 
 
 # is there a way to display min/max data labels when using min/max as upper/lower bars?
