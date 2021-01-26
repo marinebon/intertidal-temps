@@ -194,13 +194,6 @@ file_size(c(tsv, csv_dailyavg))
 x_dailyavg <- d_dailyavg
 x_dailyavg <- xts(select(x_dailyavg, -day), order.by=x_dailyavg$day) 
 
-# output dygraph interactive plot
-dygraph(x_dailyavg, main="Daily Temperature (ºC)") %>%
-  dyOptions(
-    colors = "red",
-    fillGraph = TRUE, fillAlpha = 0.4) %>% 
-  dyRangeSelector()
-
 dygraph(x_dailyavg, main="Daily Temperature (ºC)") %>%
   dySeries(
     c("temp_c_min",
