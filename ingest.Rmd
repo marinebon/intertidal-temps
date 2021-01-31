@@ -29,7 +29,7 @@ if (!require(librarian)){
 }
 shelf(
   # time-series
-  caTools, dygraphs, xts,
+  caTools, tools, dygraphs, xts,
   # tidyverse
   fs, glue, lubridate, tidyverse)
 
@@ -204,5 +204,53 @@ dygraph(x_dailyavg, main="Daily Temperature (ºC)") %>%
   dyOptions(
     fillGraph = FALSE, fillAlpha = 0.4) %>%
   dyRangeSelector() 
+```
+
+# Sorting zones and locations
+
+## Zone (high/mid/low)
+
+```{r}
+# read metadata
+robo_reference <- read_csv("ben_best_roboreference20201030.csv") 
+robo_metadata  <- read_csv("Robomussel metadata.csv") %>% 
+  rename(
+    microsite_id   = `microsite id`,
+    logger_type    = `logger type`,
+    tidal_height_m = `tidal height (m)`,
+    wave_exposure  = `wave exposure`,
+    start_date     = `start date`,
+    end_date       = `end date`
+    )
+
+# keep only logger name from each file's name
+loggerID <- sub("\\_.*", "", basename(file_path_sans_ext(tsv)))
+
+robo_list <- tibble(loggerID) 
+
+# copy all info from robo_metadata into dataframe
+robo_list <- 
+  semi_join(
+    x = robo_metadata, y = robo_list,
+    by = c("microsite_id" = "lggerID")) %>% 
+  left_join(
+    y = robo_reference,
+    by = c("site" = "robo_location"),
+    keep = FALSE ) %>%
+  # remove duplicate columns
+  # (latitude = robo_latitude, longitude = robo_longitude, location = marine_site_name)
+  select(
+    -latitude, -longitude, -marine_site_name)
+
+
+
+
+
+```
+
+## Location (map of locations)
+
+```{r}
+
 ```
 
