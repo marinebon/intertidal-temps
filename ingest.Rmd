@@ -263,7 +263,7 @@ label_style_normal <- list(
   "box-shadow"   =  "3px 3px rgba(0,0,0,0.25)",
   "font-size"    =  "11px",
   "border-color" =  "rgba(0,0,0,0.5)"
-)
+  )
   
 label_style_bold <- list(
   "color"        =  "black",
@@ -301,7 +301,7 @@ pal_zones <- colorFactor(
 # solution: Marker Clusters
 
 # would be cool to find spatial data (polygons) for each site to make outline using that instead of with rectangles
-# also would like to map temp data
+# also would like to map temp data and color markers according to zone (requires custom marker PNGs)
 
 sites_map <- leaflet(data = robo_list) %>% 
   addProviderTiles(
@@ -390,7 +390,7 @@ sites_map
 
 ### Map of individual logger
 
-### ideally want to work on customizing marker colors according to zone
+(Ideally want to work on customizing marker colors according to zone)
 
 ```{r}
 # filter out data for each individual logger
@@ -485,9 +485,9 @@ indiv_logger_map
 
 ```
 
+### Map for every individual logger
 
 ```{r}
-# create logger maps for every individual logger
 
 for (i in 1:nrow(robo_list)) {
   
@@ -578,7 +578,7 @@ for (i in 1:nrow(robo_list)) {
 }
 
 # example
-indiv_logger_map_10
+indiv_logger_map_30
 
 
 ```
