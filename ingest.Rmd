@@ -50,6 +50,7 @@ tsv              <- file.path(dir_data, "BMRMUSCABD3_2012.txt")
 csv_hourlymean   <- glue("{dir_avg}/{basename(path_ext_remove(tsv))}_hourlymean.csv")
 csv_movingwindow <- glue("{dir_avg}/{basename(path_ext_remove(tsv))}_movingwindow.csv")
 csv_dailyavg     <- glue("{dir_avg}/{basename(path_ext_remove(tsv))}_dailyavg.csv")
+csv_dailyq     <- glue("{dir_avg}/{basename(path_ext_remove(tsv))}_dailyq.csv")
 
 stopifnot(file.exists(tsv))
 
@@ -205,6 +206,50 @@ dygraph(x_dailyavg, main="Daily Temperature (ºC)") %>%
     fillGraph = FALSE, fillAlpha = 0.4) %>%
   dyRangeSelector() 
 ```
+
+## 4. Quantiles over day
+
+
+```{r}
+d_dailyq <- d %>% 
+  mutate(
+    day = floor_date(time, unit = "day")) %>%
+  group_by(day) %>%
+  summarize(
+    temp_c_q10 = quantile(Temp_C, 0.1),
+    temp_c_q90 = quantile(Temp_C, 0.9),
+    temp_c_avg = mean(Temp_C),
+    temp_c_min = min(Temp_C),
+    temp_c_max = max(Temp_C))
+
+# show file size difference from original
+write_csv(d_dailyq, csv_dailyq)
+file_size(c(tsv, csv_dailyq))
+
+# convert to xts for dygraph
+x_dailyq <- d_dailyq
+x_dailyq <- xts(select(x_dailyq, -day), order.by=x_dailyq$day) 
+
+dygraph(x_dailyq, main="Daily Temperature") %>%
+  dySeries(
+    c("temp_c_min",
+      "temp_c_avg",
+      "temp_c_max"),
+    label = " ",
+    color = "orangered") %>% 
+  dyAxis("y", label = " ") %>% 
+  dySeries(
+    c("temp_c_q10",
+      "temp_c_avg",
+      "temp_c_q90"),
+    label = "avg ºC",
+    color = "orangered") %>% 
+  dyOptions(
+    fillGraph = FALSE, fillAlpha = 0.4) %>%
+  dyRangeSelector() 
+```
+
+Daily average temperature (red line) with shading to indicate min/max (lightest orange) and quantiles 10% and 90% (darker orange).
 
 # Sorting zones and locations
 
@@ -582,4 +627,5 @@ indiv_logger_map_30
 
 
 ```
+
 
