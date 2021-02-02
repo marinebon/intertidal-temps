@@ -30,23 +30,25 @@ if (!require(librarian)){
 shelf(
   # time-series
   caTools, tools, dygraphs, xts, leaflet,
+  #spatial
+  sf,
   # tidyverse
-  fs, glue, lubridate, tidyverse)
+  fs, glue, here, lubridate, stringr, tidyverse)
 
 # paths & variables
 user <- Sys.info()[["user"]]
-# set dir_data as filepath for robomussels data 
-dir_data <- case_when(
+# set dir_gdata as filepath for robomussels data on Google Drive
+dir_gdata <- case_when(
   #user == "bbest"       ~ "/Users/bbest/Downloads/robomusseldata20201030",
   user == "bbest"       ~ "/Volumes/GoogleDrive/My Drive/projects/mbon-p2p/data/rocky/MARINe/robomusseldata20201030",
   user == "cdobbelaere" ~ "/Users/cdobbelaere/Documents/robomussels/robomusseldata20201030")
-dir_avg <- file.path(dirname(dir_data), "robomusseldata20201030_avg")
-stopifnot(any(dir.exists(c(dir_data, dir_avg))))
+dir_avg <- file.path(dirname(dir_gdata), "robomusseldata20201030_avg")
+stopifnot(any(dir.exists(c(dir_gdata, dir_avg))))
 
-# TODO: iterate over files in dir_data
+# TODO: iterate over files in dir_gdata
 
 # path individual tab-seperated value (*.tsv) file
-tsv              <- file.path(dir_data, "BMRMUSCABD3_2012.txt")
+tsv              <- file.path(dir_gdata, "BMRMUSCABD3_2012.txt")
 csv_hourlymean   <- glue("{dir_avg}/{basename(path_ext_remove(tsv))}_hourlymean.csv")
 csv_movingwindow <- glue("{dir_avg}/{basename(path_ext_remove(tsv))}_movingwindow.csv")
 csv_dailyavg     <- glue("{dir_avg}/{basename(path_ext_remove(tsv))}_dailyavg.csv")
@@ -251,7 +253,7 @@ dygraph(x_dailyq, main="Daily Temperature") %>%
 
 Daily average temperature (red line) with shading to indicate min/max (lightest orange) and quantiles 10% and 90% (darker orange).
 
-# Sorting zones and locations
+# Mapping: sorting zones and locations
 
 ## Combine metadata for each site
 
@@ -268,7 +270,7 @@ robo_metadata  <- read_csv("Robomussel metadata.csv") %>%
     end_date       = `end date`
     )
 
-robo_files <- list.files(path = dir_data, pattern = "*.txt", full.names = TRUE)
+robo_files <- list.files(path = dir_gdata, pattern = "*.txt", full.names = TRUE)
 
 loggerID <- rep(NA, length.out = length(robo_files))
 
@@ -626,6 +628,36 @@ for (i in 1:nrow(robo_list)) {
 indiv_logger_map_30
 
 
+```
+
+# Associate P2P sites with MARINe
+
+
+Get [Pole to Pole](https://marinebon.org/p2p) sites:
+
+```{r}
+d_psites <- read_csv(here("data/sites.csv")) %>% 
+  st_as_sf(
+    coords = c("lon", "lat"), remove = F,
+    crs    = 4326) # geographic coordinate ref system
+
+leaflet(d_psites) %>% 
+  addProviderTiles(providers$Esri.OceanBasemap) %>% 
+  addMarkers()
+```
+
+
+Get MARINe sites.
+
+```{r}
+d_msites <- read_csv("Robomussel metadata.csv")
+d_files  <- tibble(
+  path            = list.files(dir_gdata, ".*\\.txt", full.names = T),
+  file            = basename(path),
+  microsite_year  = file %>% path_ext_remove()) %>% 
+  separate(microsite_year, c("msite", "year"), "_", convert = T) 
+
+d_msites    
 ```
 
 
