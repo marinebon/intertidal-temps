@@ -485,7 +485,7 @@ indiv_logger_map
 
 ```
 
-### Map for every individual logger
+### Map for every individual logger (alternative to previous chunk)
 
 ```{r}
 
@@ -579,7 +579,6 @@ for (i in 1:nrow(robo_list)) {
 
 # example
 indiv_logger_map_30
-
 
 ```
 
