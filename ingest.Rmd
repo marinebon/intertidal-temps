@@ -77,6 +77,8 @@ dygraph(x, main="Temp_C") %>%
 
 # Smoothing
 
+## for each individual logger
+
 ## 1. Hourly mean (from every 10 min)
 
 ```{r}
@@ -210,7 +212,6 @@ dygraph(x_dailyavg, main="Daily Temperature (ºC)") %>%
 ```
 
 ## 4. Quantiles over day
-
 
 ```{r}
 d_dailyq <- d %>% 
@@ -632,7 +633,7 @@ indiv_logger_map_30
 # Associate P2P sites with MARINe
 
 
-Get [Pole to Pole](https://marinebon.org/p2p) sites:
+### Get [Pole to Pole](https://marinebon.org/p2p) sites:
 
 ```{r}
 d_psites <- read_csv(here("data/sites.csv")) %>% 
@@ -640,23 +641,529 @@ d_psites <- read_csv(here("data/sites.csv")) %>%
     coords = c("lon", "lat"), remove = F,
     crs    = 4326) # geographic coordinate ref system
 
+# map of all p2p sites
 leaflet(d_psites) %>% 
   addProviderTiles(providers$Esri.OceanBasemap) %>% 
   addMarkers()
 ```
 
 
-Get MARINe sites.
+### Get MARINe sites.
 
 ```{r}
-d_msites <- read_csv("Robomussel metadata.csv")
+# from robo metadata
+d_msites <- read_csv("Robomussel metadata.csv") %>% 
+  rename(
+    microsite_id   = `microsite id`,
+    logger_type    = `logger type`,
+    tidal_height_m = `tidal height (m)`,
+    wave_exposure  = `wave exposure`,
+    start_date     = `start date`,
+    end_date       = `end date`
+    )
+  
 d_files  <- tibble(
   path            = list.files(dir_gdata, ".*\\.txt", full.names = T),
   file            = basename(path),
   microsite_year  = file %>% path_ext_remove()) %>% 
-  separate(microsite_year, c("msite", "year"), "_", convert = T) 
+  separate(microsite_year, c("msite", "year"), "_", convert = T)
 
-d_msites    
+# join file names with their associated metadata
+d_sites <-
+  left_join(
+    x = d_files, y = d_msites, by = c("msite" = "microsite_id")
+    ) %>% 
+  group_by(site, zone) %>% 
+  drop_na()
 ```
+
+### Sort out temp files according to site (start with initial robomussel data)
+```{r}
+# Filter data by each combination of site and zone
+d_filtered <- split(d_sites, list(d_sites$site, d_sites$zone), drop = T, sep = "_")
+
+
+# For each zone & site combination....
+dataCombiner <- function(data_site_zone) {
+  
+  # store site and zone names
+  site <- unique(data_site_zone[["site"]])
+  zone <- unique(data_site_zone[["zone"]])
+  
+  # read temp file corresponding to each path name 
+  bind_rows(lapply(data_site_zone$path, read_tsv)) %>%
+    mutate(
+      time = parse_date_time(Time_GMT, "m/d/y H:M")) %>%
+    select(-Time_GMT) %>%
+    drop_na() %>% 
+    group_by(time) %>% 
+    # calculate average temp for each time point 
+    # across all loggers within the zone & site file
+    summarize(Temp_C = mean(Temp_C)) %>% 
+    mutate(
+      site = site,
+      zone = zone) %>% 
+    relocate(site)
+}
+
+
+# we only really want daily quantiles data (no xts conversion, yet)
+dailyQuantilesData <- function(data) {
+  data %>% 
+    mutate(
+      day = floor_date(time, unit = "day")) %>%
+    group_by(day) %>%
+    distinct(day, .keep_all = T) %>% 
+    mutate(
+      temp_c_q10 = quantile(Temp_C, 0.1),
+      temp_c_q90 = quantile(Temp_C, 0.9),
+      temp_c_avg = mean(Temp_C),
+      temp_c_min = min(Temp_C),
+      temp_c_max = max(Temp_C)) %>% 
+    select(-time, -Temp_C) %>% 
+    gather("metric", "Temp_C", c(-1, -2, -3)) %>% 
+    select(-zone, zone)
+}
+
+dailyQuantiles_xts <- function(data) {
+  data_dailyq <- data %>% 
+    mutate(
+      day = floor_date(time, unit = "day")) %>%
+    group_by(day) %>%
+    distinct(day, .keep_all = T) %>% 
+    mutate(
+      temp_c_q10 = quantile(Temp_C, 0.1),
+      temp_c_q90 = quantile(Temp_C, 0.9),
+      temp_c_avg = mean(Temp_C),
+      temp_c_min = min(Temp_C),
+      temp_c_max = max(Temp_C)) %>% 
+    select(-time, -Temp_C) %>% 
+    gather("metric", "Temp_C", c(-1, -2, -3)) %>% 
+    select(-zone, zone)
+  x_dailyq <- xts(
+    select(data_dailyq, -day),
+    order.by = data_dailyq$day) 
+  return(x_dailyq)
+}
+  
+
+# loop through all site & zone combinations and store dailyq for each in a list
+dailyq <- list()
+x_dailyq <- list() 
+
+for (i in 1:length(d_filtered)){
+  
+  # combine data for all zones of each site
+  d_site_zone <- dataCombiner(data_site_zone = d_filtered[[i]])
+  
+  # get site and zone names
+  site <- unique(d_filtered[[i]][["site"]])
+  zone <- unique(d_filtered[[i]][["zone"]])
+  site_zone <- paste0(site, "_", zone)
+  
+  # smooth data
+  d_dailyq <- dailyQuantilesData(d_site_zone)
+  x_dailyq <- dailyQuantiles_xts(d_site_zone)
+  
+  # assign global names to local objects
+  stringname <- paste0(site_zone, "_dailyq")
+  
+  dailyq[[stringname]] <- d_dailyq
+  
+  #x_dailyq[[stringname]] <- x_dailyq
+  #assign(paste0("d_dailyq_", site_zone ), d_dailyq )
+  #assign(paste0("x_dailyq_", site_zone ), x_dailyq )
+}
+```
+
+
+```{r}
+# bind rows of list elements according to whether site names match
+bind_rows(x_dailyq)
+
+
+# plot
+
+
+x_dailyq <- d_dailyq
+x_dailyq <- xts(select(x_dailyq, -day), order.by=x_dailyq$day) 
+
+dygraph(x_dailyq, main="Daily Temperature") %>%
+  dySeries(
+    c("temp_c_min",
+      "temp_c_avg",
+      "temp_c_max"),
+    label = " ",
+    color = "orangered") %>% 
+  dyAxis("y", label = " ") %>% 
+  dySeries(
+    c("temp_c_q10",
+      "temp_c_avg",
+      "temp_c_q90"),
+    label = "avg ºC",
+    color = "orangered") %>% 
+  dyOptions(
+    fillGraph = FALSE, fillAlpha = 0.4) %>%
+  dyRangeSelector() 
+
+
+  
+
+
+
+
+
+
+```
+# Extras 
+
+```{r functions for smoothing}
+# Now that we have all temp data combined and avg'd we need to run smoothing code for every df
+
+# hourly avgs
+hourlyAvg_data <- function(data) {
+  data_hourlyavg <- data %>% 
+    mutate(time = floor_date(time, unit = "hour")) %>% 
+    group_by(time) %>% 
+    summarize(Temp_C_hourly_mean = mean(Temp_C)) 
+  return(data_hourlyavg)
+}
+
+hourlyAvg <- function(data) {
+  data_hourlyavg <- data %>% 
+    mutate(time = floor_date(time, unit = "hour")) %>% 
+    group_by(time) %>% 
+    summarize(Temp_C_hourly_mean = mean(Temp_C)) 
+  x_hourlyavg <- xts(
+    select(data_hourlyavg, -time),
+    order.by = data_hourlyavg$time)
+  return(x_hourlyavg)
+}
+
+
+# 6 hour moving window (min, mean, max) using previous hourly averages 
+movingWindow <- function(data_hourlyavg) {
+  data_movingwindow <- data_hourlyavg %>% 
+    mutate(
+      Temp_C_min_06_hours  =  runmin(Temp_C_hourly_mean, k=6, alg="C",
+                                     endrule="constant", align="center"),
+      Temp_C_mean_06_hours = runmean(Temp_C_hourly_mean, k=6, alg="C",
+                                     endrule="constant", align="center"),
+      Temp_C_max_06_hours  =  runmax(Temp_C_hourly_mean,  k=6, alg="C",
+                                     endrule="constant", align="center")) %>% 
+  select(-Temp_C_hourly_mean)
+  x_movingwindow <- xts(
+    select(data_movingwindow, -time),
+    order.by = data_movingwindow$time) 
+  return(x_movingwindow)
+}
+
+
+# daily avgs
+dailyAvg <- function(data) {
+  data_dailyavg <- data %>% 
+    mutate(day = floor_date, unit = "day") %>%
+    group_by(day) %>%
+    summarize(
+      temp_c_avg = mean(Temp_C),
+      temp_c_min = min(Temp_C),
+      temp_c_max = max(Temp_C))
+  x_dailyavg <- xts(
+    select(data_dailyavg, -day),
+    order.by = data_dailyavg$day)
+  return(x_dailyavg)
+}
+  
+
+
+# daily quantiles
+dailyQuantiles <- function(data) {
+  data_dailyq <- data %>% 
+    mutate(
+      day = floor_date(time, unit = "day")) %>%
+    group_by(day) %>%
+    mutate(
+      temp_c_q10 = quantile(Temp_C, 0.1),
+      temp_c_q90 = quantile(Temp_C, 0.9),
+      temp_c_avg = mean(Temp_C),
+      temp_c_min = min(Temp_C),
+      temp_c_max = max(Temp_C)) %>% 
+    distinct(day, .keep_all = TRUE) %>% 
+    select(-time, -Temp_C) %>% 
+    gather("metric", "Temp_C", c(-1, -2, -3)) %>% 
+    select(-zone, zone)
+  
+  x_dailyq <- xts(
+    select(data_dailyq, -day),
+    order.by = data_dailyq$day) 
+
+  return(x_dailyq)
+}
+
+
+
+
+
+```
+
+
+```{r older loop for smoothing, no list}
+
+for (i in 1:length(d_filtered)){
+  
+  # combine data for all zones of each site
+  d_site_zone <- dataCombiner(data_site_zone = d_filtered[[i]])
+  
+  # get site and zone names
+  site <- unique(d_filtered[[i]][["site"]])
+  zone <- unique(d_filtered[[i]][["zone"]])
+  site_zone <- paste0(site, "_", zone)
+  
+  # smooth data
+  d_dailyq <- dailyQuantilesData(d_site_zone)
+  x_dailyq <- dailyQuantiles(d_site_zone)
+  
+  # assign global names to local objects
+  assign(paste0("d_dailyq_",       site_zone ), d_dailyq      )
+  #assign(paste0("x_dailyq_",       site_zone ), x_dailyq      )
+}
+```
+
+
+
+```{r working loop!}
+
+for (i in 1:length(d_filtered)){
+  
+  # combine data for all zones of each site
+  d_site_zone <- dataCombiner(data_site_zone = d_filtered[[i]])
+  
+  # get site and zone names
+  site <- unique(d_filtered[[i]][["site"]])
+  zone <- unique(d_filtered[[i]][["zone"]])
+  site_zone <- paste0(site, "_", zone)
+  
+  # smooth data
+  d_hourlyavg <- hourlyAvg_data(d_site_zone) # only for purpose of moving window
+  x_hourlyavg <- hourlyAvg(d_site_zone)
+  x_movingwindow <- movingWindow(d_hourlyavg)
+  x_dailyavg <- dailyAvg(d_site_zone)
+  x_dailyq <- dailyQuantiles(d_site_zone)
+  
+  # assign global names to local objects
+  assign(paste0("d_", site_zone), d_site_zone)
+  assign(paste0("x_hourlyavg_",    site_zone ), x_hourlyavg   )
+  assign(paste0("x_movingwindow_", site_zone ), x_movingwindow)
+  assign(paste0("x_dailyavg_",     site_zone ), x_dailyavg    )
+  assign(paste0("x_dailyq_",       site_zone ), x_dailyq      )
+
+}
+
+
+
+
+
+
+
+
+
+
+```
+
+
+```{r}
+for (i in 1:length(d_filtered)){
+  
+  # combine data for all zones of each site
+  d_site_zone <- dataCombiner(data_site_zone = d_filtered[[i]])
+  
+  # get site and zone names
+  sitename <- unique(d_filtered[[i]][["site"]])
+  zonename <- unique(d_filtered[[i]][["zone"]])
+  
+  # smooth data
+  d_hourlyavg <- hourlyAvg_data(d_site_zone)
+  x_movingwindow <- movingWindow(d_hourlyavg)
+  x_dailyavg <- dailyAvg(d_site_zone)
+  x_dailyq <- dailyAvg(d_site_zone)
+  
+  # store unsmoothed and smoothed data
+  assign(
+    paste0(
+      "d_", unique(d_filtered[[i]][["site"]]),
+      "_", unique(d_filtered[[i]][["zone"]])),
+    d_site_zone)
+  
+  assign()
+  
+  
+  
+  
+
+
+# plot outputs
+dygraph(x_USCABD_Mid_dailyavg, main="Daily Temperature (ºC)") %>%
+  dySeries(
+    c("temp_c_min",
+      "temp_c_avg",
+      "temp_c_max"),
+    label = "Daily Temperature (ºC)",
+    color = "orangered") %>% 
+  dyOptions(
+    fillGraph = FALSE, fillAlpha = 0.4) %>%
+  dyRangeSelector() 
+
+
+
+
+
+
+
+```
+
+
+```{r}
+all_sites_zones <- list()
+
+sitezone_smoothed <- list()
+
+for (i in 1:length(d_filtered)){
+  
+  # combine data for all zones owaf each site
+  d_site_zone <- dataCombiner(data_site_zone = d_filtered[[i]])
+  
+  # get site and zone names
+  site <- unique(d_filtered[[i]][["site"]])
+  zone <- unique(d_filtered[[i]][["zone"]])
+  site_zone <- paste0(site, "_", zone)
+  
+  # smooth data
+  d_hourlyavg <- hourlyAvg_data(d_site_zone) # only for purpose of moving window
+  x_hourlyavg <- hourlyAvg(d_site_zone)
+  x_movingwindow <- movingWindow(d_hourlyavg)
+  x_dailyavg <- dailyAvg(d_site_zone)
+  x_dailyq <- dailyAvg(d_site_zone)
+  
+  # assign global names to local objects
+  sitezone_smoothed <- setNames(
+    as.list(c(x_hourlyavg, x_movingwindow, x_dailyage, x_dailyq)),
+    nm = c(
+      paste0("x_", site_zone, "_", "hourlyavg"   ),
+      paste0("x_", site_zone, "_", "movingwindow"),
+      paste0("x_", site_zone, "_", "dailyavg"    ),
+      paste0("x_", site_zone, "_", "dailyq"      )
+      )
+    )
+  
+}
+# Loop to combine all temp data for each zone of each site 
+for (i in 1:length(d_filtered)){
+  d_site_zone <- dataCombiner(data_site_zone = d_filtered[[i]])
+  # where d_filtered[[i]] is a different combination of site and zone
+  # i.e. accessing all the temp data for each site and zone combination
+  # and combining the corresponding txt files
+  assign(
+    paste0(
+      "d_", unique(d_filtered[[i]][["site"]]),
+      "_", unique(d_filtered[[i]][["zone"]])
+      ),
+    d_site_zone
+    )
+  }
+
+
+
+
+
+
+d_USCABD_Mid <- bind_rows(lapply(d_sites_USCABD_Mid$path, read_tsv)) %>%
+  mutate(
+    time = parse_date_time(Time_GMT, "m/d/y H:M")) %>%
+  select(-Time_GMT) %>%
+  drop_na() %>% 
+  group_by(time) %>% 
+  summarize(Temp_C = mean(Temp_C)) # avg temp for each time slot across all loggers
+
+# read in data for first site
+for (i in 1:nrow(d_sites)) { # for every logger
+  for (j in 1:length(unique(d_sites$site))) {
+    for (k in 1: length(unique(d_sites$zone))) {
+      
+      # Loop through each site and zone combination
+      site_j_zone_k <- d_sites %>% 
+        filter(
+          site == as.character(d_sites$site[j]),
+          zone == as.character(d_sites$zone[k])
+          )
+      assign(paste0("site_", site[j], "zone_", zone[k]), site_j_zone_k)
+    }
+  }
+      
+      # Read in associated data for those sites and zones
+      d_sites_i <- read_tsv(as.character(d_sites$path[i])) %>% 
+        mutate(
+          time = parse_date_time(Time_GMT, "m/d/y H:M")) %>% 
+        select(-Time_GMT) %>% 
+        arrange(time) 
+    }
+  }
+  
+  
+  
+  for (zone in 1:length(distinct(d_sites$zone)) { # for every unique zone
+    site_i_zone_j <- d_sites %>%
+      filter(
+        site == as.character(site[i]),
+        zone == as.character(zone[j]))
+  }
+}
+
+d_sites_1 <- read_tsv(as.character(d_sites$path[1])) %>% 
+  mutate(
+    time = parse_date_time(Time_GMT, "m/d/y H:M")) %>% 
+  select(-Time_GMT) %>% 
+  arrange(time) 
+
+
+
+
+# 6 hour moving average, using hourly averages from earlier
+d_movingwindow <- d_hourlymean %>% 
+  mutate(
+    # min for 6 hr moving window, based on hourly mean
+    Temp_C_min_06_hours  = runmin(Temp_C_hourly_mean,  k=6, alg="C", endrule="constant", align="center"),
+    # mean for 6 hr moving window, based on hourly mean
+    Temp_C_mean_06_hours = runmean(Temp_C_hourly_mean, k=6, alg="C", endrule="constant", align="center"),
+    # max for 6 hr moving window, based on hourly mean
+    Temp_C_max_06_hours  = runmax(Temp_C_hourly_mean,  k=6, alg="C", endrule="constant", align="center")
+    ) %>% 
+  select(-Temp_C_hourly_mean)
+
+d_dailyavg <- d %>% 
+  mutate(
+    day = floor_date(time, unit = "day")) %>%
+  group_by(day) %>%
+  summarize(
+    temp_c_avg = mean(Temp_C),
+    temp_c_min = min(Temp_C),
+    temp_c_max = max(Temp_C))
+
+d_dailyq <- d %>% 
+  mutate(
+    day = floor_date(time, unit = "day")) %>%
+  group_by(day) %>%
+  summarize(
+    temp_c_q10 = quantile(Temp_C, 0.1),
+    temp_c_q90 = quantile(Temp_C, 0.9),
+    temp_c_avg = mean(Temp_C),
+    temp_c_min = min(Temp_C),
+    temp_c_max = max(Temp_C))
+
+  
+```
+
+### Sort out temp files according to site, starting with the initial data
+
+
 
 
