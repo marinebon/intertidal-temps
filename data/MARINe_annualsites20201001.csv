@@ -1,0 +1,125 @@
+site code,marine site name,marine sort order,latitude,longitude,site link,annual survey,temperature site
+ALC,Alcatraz,5430,37.82500076,-122.42194,https://marine.ucsc.edu/sitepages/alcatrazisland.html,Y,N
+ALEG,Alegria,6420,34.4671402,-120.27738,https://marine.ucsc.edu/sitepages/alegria.html,Y,N
+AMN,American Camp,3110,48.45730972,-123.02222,https://marine.ucsc.edu/sitepages/americancamp.html,Y,N
+ANCR,Cat Rock,7300,34.00556946,-119.41925,https://marine.ucsc.edu/sitepages/catrock.html,Y,N
+ANMW,Middle West,7310,34.00590134,-119.39649,https://marine.ucsc.edu/sitepages/middlewest.html,Y,Y
+ANSFC,S Frenchys Cove,7330,34.00659943,-119.41077,https://marine.ucsc.edu/sitepages/sfrenchyscove.html,Y,Y
+ARG,Cape Arago,4600,43.30894089,-124.40077,https://marine.ucsc.edu/sitepages/capearago.html,Y,Y
+ARHO,Arroyo Hondo,6440,34.47343826,-120.1454,https://marine.ucsc.edu/sitepages/arroyohondo.html,Y,N
+ASI,Asilomar,6105,36.6222496,-121.94161,https://marine.ucsc.edu/sitepages/asilomar.html,Y,N
+BLOH,Blowhole,5508,37.7011795,-123.00383,https://marine.ucsc.edu/sitepages/blowhole.html,Y,N
+BML,Bodega,5200,38.31819916,-123.07365,https://marine.ucsc.edu/sitepages/bodega.html,Y,Y
+BOA,Boat House,6390,34.55387878,-120.61167,https://marine.ucsc.edu/sitepages/boathouse.html,Y,Y
+BOB,Bob Creek,4400,44.24456024,-124.11443,https://marine.ucsc.edu/sitepages/bobcreek.html,Y,Y
+BOL,Bolinas Point,5240,37.90354156,-122.72721,https://marine.ucsc.edu/sitepages/bolinaspoint.html,Y,N
+BRN,Burnt Hill,4900,42.22814178,-124.38786,https://marine.ucsc.edu/sitepages/burnthill.html,Y,Y
+CAB1,Cabrillo I,6860,32.66947174,-117.2455,https://marine.ucsc.edu/sitepages/cabrillo1.html,Y,N
+CAB2,Cabrillo II,6880,32.66765976,-117.24526,https://marine.ucsc.edu/sitepages/cabrillo2.html,Y,N
+CAB3,Cabrillo III,6900,32.6658287,-117.24417,https://marine.ucsc.edu/sitepages/cabrillo3.html,Y,N
+CAR,Carmel Point,6140,36.54375839,-121.93412,https://marine.ucsc.edu/sitepages/carmelpoint.html,Y,Y
+CARE,Cardiff Reef,6760,32.99983978,-117.27867,https://marine.ucsc.edu/sitepages/cardiffreef.html,Y,N
+CARP,Carpinteria,6480,34.38703156,-119.51407,https://marine.ucsc.edu/sitepages/carpinteria.html,Y,N
+CAY,Cayucos,6310,35.44739151,-120.94982,https://marine.ucsc.edu/sitepages/cayucos.html,Y,Y
+CHI,China Rocks,6110,36.60615921,-121.95939,https://marine.ucsc.edu/sitepages/chinarocks.html,Y,Y
+CLBS,Boy Scout Camp,7710,33.00112152,-118.54832,https://marine.ucsc.edu/sitepages/boyscoutcamp.html,Y,N
+CLEP,Eel Point,7730,32.91801071,-118.54668,https://marine.ucsc.edu/sitepages/eelpoint.html,Y,N
+CLHBC,Horse Beach Cove,7720,32.8030014,-118.42431,https://marine.ucsc.edu/sitepages/horsebeachcove.html,Y,N
+CLWC,West Cove,7700,33.01477051,-118.60613,https://marine.ucsc.edu/sitepages/westcove.html,Y,N
+COPT,Coal Oil Point,6460,34.40692902,-119.87804,https://marine.ucsc.edu/sitepages/coaloilpoint.html,Y,N
+CRCO,Crystal Cove,6660,33.57078171,-117.83773,https://marine.ucsc.edu/sitepages/crystalcove.html,Y,N
+CTBR,Bird Rock,7610,33.45145035,-118.48763,https://marine.ucsc.edu/sitepages/birdrock.html,Y,N
+CTLH,Little Harbor,7650,33.38499069,-118.4752,https://marine.ucsc.edu/sitepages/littleharbor.html,Y,N
+DAPT,Dana Point,6740,33.4598999,-117.71475,https://marine.ucsc.edu/sitepages/danapoint.html,Y,N
+DMN,Damnation Creek,5020,41.65248871,-124.12784,https://marine.ucsc.edu/sitepages/damnation.html,Y,Y
+DSLF,Dead Sea Lion Flat,5509,37.69809341,-122.99984,https://marine.ucsc.edu/sitepages/deadsealion.html,Y,N
+END,Enderts,5010,41.68999863,-124.14257,https://marine.ucsc.edu/sitepages/enderts.html,Y,Y
+ENG,English Camp,3100,48.59344101,-123.1555,https://marine.ucsc.edu/sitepages/englishcamp.html,Y,N
+ESP,Ecola,4100,45.91809082,-123.98031,https://marine.ucsc.edu/sitepages/ecola.html,Y,Y
+FKC,False Klamath Cove,5030,41.59476089,-124.10643,https://marine.ucsc.edu/sitepages/falseklamath.html,Y,Y
+FOG,Fogarty Creek,4300,44.83863831,-124.05875,https://marine.ucsc.edu/sitepages/fogartycreek.html,Y,N
+FRA,Franklin Point,6010,37.1495018,-122.36101,https://marine.ucsc.edu/sitepages/franklinpoint.html,Y,Y
+FRE,Freshwater Bay,3850,48.15049362,-123.63699,https://marine.ucsc.edu/sitepages/freshwater.html,Y,N
+GAR,Garrapata,6170,36.46903992,-121.93444,https://marine.ucsc.edu/sitepages/garrapata.html,Y,Y
+GPT,Government Point,6400,34.4433403,-120.45655,https://marine.ucsc.edu/sitepages/government.html,Y,Y
+GREN,Point Grenville,3980,47.30255127,-124.27531,https://marine.ucsc.edu/sitepages/pointgrenville.html,Y,Y
+HATE,Hat Island East,3290,48.52220917,-122.54353,https://marine.ucsc.edu/sitepages/hatislandeast.html,Y,Y
+HATW,Hat Island West,3280,48.52352905,-122.55222,https://marine.ucsc.edu/sitepages/hatislandwest.html,Y,Y
+HAZ,Hazards,6320,35.28966141,-120.88325,https://marine.ucsc.edu/sitepages/hazards.html,Y,Y
+HOO,McDonald Cove; Hood Canal,3460,47.62841797,-122.95034,https://marine.ucsc.edu/sitepages/mcdonaldcove.html,Y,Y
+HOP,Hopkins,6090,36.62120056,-121.9073,https://marine.ucsc.edu/sitepages/hopkins.html,Y,Y
+KAY,Kayak Island,1730,57.02249908,-135.35387,https://marine.ucsc.edu/sitepages/kayakisland.html,Y,Y
+KIB,Kibesillah Hill,5070,39.60411835,-123.78887,https://marine.ucsc.edu/sitepages/kibesillah.html,Y,Y
+KYDI,Kydikabbit Point,3900,48.39147186,-124.65372,https://marine.ucsc.edu/sitepages/kydikabbitpoint.html,Y,Y
+MAN,Manchester State Park; Central Puget Sound,3490,47.57688141,-122.54411,https://marine.ucsc.edu/sitepages/manchester.html,Y,Y
+MCR,Mill Creek,6220,35.97964859,-121.49034,https://marine.ucsc.edu/sitepages/millcreek.html,Y,Y
+MEN,Cape Mendocino,5050,40.3409996,-124.36317,https://marine.ucsc.edu/sitepages/capemendocino.html,Y,Y
+MFL,Mussel Flat Farallones,5510,37.69589996,-123.0029,https://marine.ucsc.edu/sitepages/musselflat.html,Y,N
+MOL,Andrew Molera,6190,36.28060913,-121.86317,https://marine.ucsc.edu/sitepages/andrewmolera.html,Y,Y
+MUSH,Mussel Shoals,6500,34.35548019,-119.44073,https://marine.ucsc.edu/sitepages/musselshoals.html,Y,N
+NANO,Navy North,6820,32.69260025,-117.25327,https://marine.ucsc.edu/sitepages/navynorth.html,Y,N
+NASO,Navy South,6840,32.6828804,-117.24956,https://marine.ucsc.edu/sitepages/navysouth.html,Y,N
+OCC,Occulto,6350,34.88122177,-120.63954,https://marine.ucsc.edu/sitepages/occulto.html,Y,Y
+OLDS,Old Stairs,6520,34.06612015,-118.99779,https://marine.ucsc.edu/sitepages/oldstairs.html,Y,N
+PAR,Partington Cove,6200,36.17375946,-121.69653,https://marine.ucsc.edu/sitepages/partington.html,Y,Y
+PBL,Piedras Blancas,6260,35.66492844,-121.28699,https://marine.ucsc.edu/sitepages/piedrasblancas.html,Y,Y
+PCOV,Paradise Cove,6580,34.01200867,-118.79225,https://marine.ucsc.edu/sitepages/paradisecove.html,Y,N
+PEB,Pebble Beach,5540,37.23263168,-122.41607,https://marine.ucsc.edu/sitepages/pebblebeach.html,Y,Y
+PES,Pescadero Point,6120,36.56108856,-121.95436,https://marine.ucsc.edu/sitepages/pescadero.html,Y,Y
+PIN,Point Pinos,6100,36.63795853,-121.93758,https://marine.ucsc.edu/sitepages/pointpinos.html,Y,Y
+PIRA,Pirates Cove,1740,56.98661041,-135.37755,https://marine.ucsc.edu/sitepages/piratescove.html,Y,Y
+POA,Point of the Arches,3910,48.24200058,-124.70779,https://marine.ucsc.edu/sitepages/pointofarches.html,Y,N
+POP,Post Point,3080,48.7120018,-122.51913,https://marine.ucsc.edu/sitepages/postpoint.html,Y,Y
+PPT,Pigeon Point,6000,37.18360901,-122.39529,https://marine.ucsc.edu/sitepages/pigeonpoint.html,Y,Y
+PSN,Point Sierra Nevada,6250,35.72882843,-121.31866,https://marine.ucsc.edu/sitepages/pointsierra.html,Y,Y
+PTB,Point Bonita,5280,37.81911087,-122.52935,https://marine.ucsc.edu/sitepages/pointbonita.html,Y,N
+PTFM,Point Fermin,6620,33.70679092,-118.28599,https://marine.ucsc.edu/sitepages/pointfermin.html,Y,N
+PTL,Point Lobos,6150,36.51366043,-121.94688,https://marine.ucsc.edu/sitepages/pointlobos.html,Y,Y
+PUR,Purisima,6360,34.75559998,-120.64076,https://marine.ucsc.edu/sitepages/purisima.html,Y,Y
+PVA,Pacific Valley,6230,35.94704819,-121.48053,https://marine.ucsc.edu/sitepages/pacificvalley.html,Y,Y
+RMR,Rancho Marino; Cambria,6290,35.52244186,-121.073,https://marine.ucsc.edu/sitepages/cambria.html,Y,Y
+SAD,Sandhill Bluff,6050,36.9801712,-122.15503,https://marine.ucsc.edu/sitepages/sandhillbluff.html,Y,Y
+SAGE,Sage Rock,1720,57.04869843,-135.32314,https://marine.ucsc.edu/sitepages/sagerock.html,Y,Y
+SBLC,Landing Cove,7400,33.48157883,-119.02958,https://marine.ucsc.edu/sitepages/landingcove.html,Y,N
+SBNC,Saddlebag North Cove,3260,48.53710175,-122.5547,https://marine.ucsc.edu/sitepages/saddlebagnorth.html,Y,Y
+SBSE,Saddlebag South East,3270,48.53430176,-122.5549,https://marine.ucsc.edu/sitepages/saddlebagsouth.html,Y,Y
+SBSLR,Sea Lion Rookery,7410,33.47201157,-119.03066,https://marine.ucsc.edu/sitepages/sealionrookery.html,Y,N
+SCFC,Fraser Cove,7220,34.06264877,-119.91915,https://marine.ucsc.edu/sitepages/frasercove.html,Y,N
+SCOC,Orizaba Cove,7230,34.04507828,-119.72188,https://marine.ucsc.edu/sitepages/orizabacove.html,Y,N
+SCPH,Prisoners Harbor,7240,34.02037811,-119.6867,https://marine.ucsc.edu/sitepages/prisonersharbor.html,Y,N
+SCRE,Scripps Reef,6780,32.8716507,-117.25328,https://marine.ucsc.edu/sitepages/scripps.html,Y,N
+SCSR,Scorpion Rock,7250,34.04552078,-119.54685,https://marine.ucsc.edu/sitepages/scorpionrock.html,Y,N
+SCT,Scott Creek,6030,37.04425049,-122.23493,https://marine.ucsc.edu/sitepages/scottcreek.html,Y,Y
+SCTR,Trailer,7200,34.05186844,-119.9032,https://marine.ucsc.edu/sitepages/trailer.html,Y,N
+SCWA,Willows Anchorage,7280,33.96183014,-119.75495,https://marine.ucsc.edu/sitepages/willows.html,Y,Y
+SEA,Sea Ranch,5150,38.73049927,-123.48864,https://marine.ucsc.edu/sitepages/searanch.html,Y,Y
+SFP,Starfish Point,3950,47.65269852,-124.3905,https://marine.ucsc.edu/sitepages/starfishpoint.html,Y,N
+SHB,Shell Beach,6340,35.1688118,-120.69668,https://marine.ucsc.edu/sitepages/shellbeach.html,Y,Y
+SHCO,Shaws Cove,6680,33.54476929,-117.79941,https://marine.ucsc.edu/sitepages/shawscove.html,Y,N
+SHT,Shelter Cove,5060,40.02254105,-124.07366,https://marine.ucsc.edu/sitepages/sheltercove.html,Y,Y
+SIM,Vista del Mar,6280,35.60414124,-121.14232,https://marine.ucsc.edu/sitepages/vistadelmar.html,Y,Y
+SLR,Slide Ranch,5270,37.87406158,-122.60094,https://marine.ucsc.edu/sitepages/slideranch.html,Y,N
+SMC,Santa Maria Creek,5220,38.01242828,-122.84915,https://marine.ucsc.edu/sitepages/santamariacreek.html,Y,N
+SMCH,Cuyler Harbor,7020,34.04854965,-120.33642,https://marine.ucsc.edu/sitepages/cuylerharbor.html,Y,N
+SMCP,Crook Point,7030,34.02159119,-120.37887,https://marine.ucsc.edu/sitepages/crookpoint.html,Y,Y
+SMHP,Harris Point,7010,34.07337189,-120.36322,https://marine.ucsc.edu/sitepages/harrispoint.html,Y,N
+SMOH,Otter Harbor,7000,34.05202866,-120.40758,https://marine.ucsc.edu/sitepages/otterharbor.html,Y,Y
+SNAP,Anchor Point,7511,33.26713562,-119.48723,https://marine.ucsc.edu/sitepages/anchorpoint.html,Y,N
+SNCO,Cosign,7540,33.27446365,-119.57676,https://marine.ucsc.edu/sitepages/cosign.html,Y,N
+SNMP,Marker Poles,7520,33.21868134,-119.49562,https://marine.ucsc.edu/sitepages/markerpoles.html,Y,N
+SNTS,Thousand Springs,7500,33.28504944,-119.52983,https://marine.ucsc.edu/sitepages/thousandsprings.html,Y,N
+SOB,Soberanes,6180,36.44786835,-121.92874,https://marine.ucsc.edu/sitepages/soberanes.html,Y,Y
+SOK,Sokol Point; Chilean Memorial,3930,47.94709015,-124.66229,https://marine.ucsc.edu/sitepages/chileansokol.html,Y,N
+SREP,East Point,7120,33.94269943,-119.96797,https://marine.ucsc.edu/sitepages/eastpoint.html,Y,N
+SRFP,Ford Point,7130,33.91453171,-120.05024,https://marine.ucsc.edu/sitepages/fordpoint.html,Y,N
+SRFR,Fossil Reef,7100,33.9931488,-120.23758,https://marine.ucsc.edu/sitepages/fossilreef.html,Y,Y
+SRJL,Johnsons Lee,7140,33.90871811,-120.08629,https://marine.ucsc.edu/sitepages/johnsonslee.html,Y,Y
+SRNWT,NW Talcott,7110,34.00957108,-120.2176,https://marine.ucsc.edu/sitepages/nwtalcott.html,Y,Y
+STA,Stairs,6370,34.73038101,-120.61546,https://marine.ucsc.edu/sitepages/stairs.html,Y,Y
+STO,Stornetta,5110,38.93787003,-123.7288,https://marine.ucsc.edu/sitepages/stornetta.html,Y,Y
+SWAM,Swamis Beach,6750,33.03509903,-117.29425,https://marine.ucsc.edu/sitepages/swamis.html,Y,N
+SWC,Stillwater,6130,36.56087112,-121.94053,https://marine.ucsc.edu/sitepages/stillwater.html,Y,Y
+TAY,Taylor Point,3940,47.8660202,-124.57004,https://marine.ucsc.edu/sitepages/taylorpoint.html,Y,N
+TPT,Terrace Point,6070,36.94841003,-122.06457,https://marine.ucsc.edu/sitepages/terracepoint.html,Y,Y
+TRIS,Treasure Island,6720,33.51335144,-117.75793,https://marine.ucsc.edu/sitepages/treasureisland.html,Y,N
+WHPT,White Point,6600,33.71538925,-118.31961,https://marine.ucsc.edu/sitepages/whitepoint.html,Y,N
