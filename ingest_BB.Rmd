@@ -1,0 +1,664 @@
+---
+title: "ingest"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, message = F, warning = F)
+```
+
+## TODO
+
+1. PROBLEM. Data is too big for simple interactive time-series plot (ie dygraphs) if on same Rmd output html page. The folder of *.csv's [robomusseldata20201030 - Google Drive](https://drive.google.com/drive/u/3/folders/1kzjZ72vFxRGsafTgCCzq6cXIhQ1GYQa3) contains 317 files totalling 236 MB. SOLUTION(s):
+    1. Read into SQLite database and show as Shiny app.
+
+
+## Ingest single txt
+
+```{r}
+# libraries
+if (!require(librarian)){
+  install.packages("librarian")
+  library(librarian)
+}
+shelf(
+  # time-series
+  caTools, tools, dygraphs, xts, leaflet,
+  #spatial
+  sf,
+  # tidyverse
+  DT, fs, glue, here, lubridate, stringr, tidyverse)
+
+# paths & variables
+user <- Sys.info()[["user"]]
+# set dir_gdata as filepath for robomussels data on Google Drive
+dir_gdata <- case_when(
+  #user == "bbest"       ~ "/Users/bbest/Downloads/robomusseldata20201030",
+  user == "bbest"       ~ "/Volumes/GoogleDrive/My Drive/projects/mbon-p2p/data/rocky/MARINe/robomusseldata20201030",
+  user == "cdobbelaere" ~ "/Users/cdobbelaere/Documents/robomussels/robomusseldata20201030")
+dir_avg <- file.path(dirname(dir_gdata), "robomusseldata20201030_avg")
+stopifnot(any(dir.exists(c(dir_gdata, dir_avg))))
+
+# TODO: iterate over files in dir_gdata
+
+# path individual tab-seperated value (*.tsv) file
+tsv              <- file.path(dir_gdata, "BMRMUSCABD3_2012.txt")
+csv_hourlymean   <- glue("{dir_avg}/{basename(path_ext_remove(tsv))}_hourlymean.csv")
+csv_movingwindow <- glue("{dir_avg}/{basename(path_ext_remove(tsv))}_movingwindow.csv")
+csv_dailyavg     <- glue("{dir_avg}/{basename(path_ext_remove(tsv))}_dailyavg.csv")
+csv_dailyq     <- glue("{dir_avg}/{basename(path_ext_remove(tsv))}_dailyq.csv")
+
+stopifnot(file.exists(tsv))
+
+# read data from individual tsv files
+d <- read_tsv(tsv) %>% 
+  mutate(
+    time = parse_date_time(Time_GMT, "m/d/y H:M")) %>% # parse through datetimes, store as time col.
+  select(-Time_GMT) %>% # get rid of original time column
+  arrange(time) # d # sort by ascending time 
+
+# convert to eXtensible Time Series for dygraph
+x <- d 
+x <- xts(select(x, -time), order.by=x$time) # select only Temp_C and order by time, store as xts object 
+
+# output dygraph interactive plot
+dygraph(x, main="Temp_C") %>%
+  dyOptions(
+    colors = "red",
+    fillGraph = TRUE, fillAlpha = 0.4) %>% 
+  dyRangeSelector()
+```
+
+# Smoothing
+
+## 1. Hourly mean (from every 10 min)
+
+```{r}
+# create df containing hourly mean temp data
+d_hourlymean <- d %>% 
+  mutate(time = floor_date(time, unit = "hour")) %>% # round each time down to the nearest hourly boundary 
+  # (could alternatively round up with ceiling_date() or round to nearest values with round_date())
+  group_by(time) %>% # group by hour
+  summarize(Temp_C_hourly_mean = mean(Temp_C)) # calculate mean for each hour
+
+# show file size difference from original
+write_csv(d_hourlymean, csv_hourlymean)
+file_size(c(tsv, csv_hourlymean))
+
+# convert to xts for dygraph
+x_hourlymean <- d_hourlymean
+x_hourlymean <- xts(select(x_hourlymean, -time), order.by=x_hourlymean$time) 
+
+# output dygraph interactive plot
+dygraph(x_hourlymean, main="Hourly_Mean_Temp_C") %>%
+  dyOptions(
+    colors = "red",
+    fillGraph = TRUE, fillAlpha = 0.4) %>% 
+  dyRangeSelector()
+```
+
+## 2. Min/max over 6 hr moving window
+(note: can do rolling averages directly in dygraphs too with dygraph() %>% dyRoller(rollPeriod = 6)
+
+```{r}
+# 6 hour moving average, using hourly averages from earlier
+d_movingwindow <- d_hourlymean %>% 
+  mutate(
+    # min for 6 hr moving window, based on hourly mean
+    Temp_C_min_06_hours  = runmin(Temp_C_hourly_mean,  k=6, alg="C", endrule="constant", align="center"),
+    # mean for 6 hr moving window, based on hourly mean
+    Temp_C_mean_06_hours = runmean(Temp_C_hourly_mean, k=6, alg="C", endrule="constant", align="center"),
+    # max for 6 hr moving window, based on hourly mean
+    Temp_C_max_06_hours  = runmax(Temp_C_hourly_mean,  k=6, alg="C", endrule="constant", align="center")
+    ) %>% 
+  select(-Temp_C_hourly_mean)
+  
+# show file size difference from original
+write_csv(d_movingwindow, csv_movingwindow)
+file_size(c(tsv, csv_movingwindow))
+
+# convert to xts  
+x_movingwindow <- xts(select(d_movingwindow, -time), order.by=d_movingwindow$time) 
+
+# output dygraph plot
+dygraph(x_movingwindow, main="Temp_C") %>%
+  dySeries(
+    c("Temp_C_min_06_hours",
+      "Temp_C_mean_06_hours",
+      "Temp_C_max_06_hours"),
+    label = "Temp (ºC) over 6 hour moving window",
+    color = "orangered") %>% 
+  dyOptions(
+    #colors = c("orange", "orangered", "red"),
+    fillGraph = FALSE, fillAlpha = 0.4) %>% 
+  dyRangeSelector() 
+
+# is there a way to display min/max data labels when using min/max as upper/lower bars?
+```
+
+```{r}
+# alternative: moving min and max using original 
+# but this doesn't reduce amount of data so not ideal
+d_movingwindow_orig <- d %>% 
+  mutate(time = floor_date(time, unit = "hour")) %>% 
+  mutate(
+    Temp_C_min_06_hours  = runmin(Temp_C,  k=6, alg="C", endrule="constant", align="center"),
+    Temp_C_max_06_hours  = runmax(Temp_C,  k=6, alg="C", endrule="constant", align="center"),
+    Temp_C_mean_06_hours = runmean(Temp_C, k=6, alg="C", endrule="constant", align="center")
+    ) %>% 
+  select(-Temp_C)
+  #group_by(time) %>% 
+  #mutate(Temp_C_hourly_mean = mean(Temp_C)) %>% 
+  #ungroup()
+
+x_movingwindow_orig <- xts(select(d_movingwindow_orig, -time), order.by=d_movingwindow_orig$time) # View(x_movingwindow_orig)
+
+# output dygraph interactive plot
+# ideally would like to plot the means with fill but plot the mins and maxes just with line
+dygraph(x_movingwindow_orig, main="Temp_C") %>%
+  dySeries(
+    c("Temp_C_min_06_hours",
+      "Temp_C_mean_06_hours",
+      "Temp_C_max_06_hours"),
+    label = "Temp (ºC) over 6 hour moving window",
+    color = "orangered") %>% 
+  dyOptions(
+    #colors = c("orange", "orangered", "red"),
+    fillGraph = TRUE, fillAlpha = 0.4) %>% 
+  dyRangeSelector() 
+
+```
+
+## 3. Min/max over day
+
+First find points of inflection to break up day. Possibly averaging around 3 points of max in case anomalous 
+
+```{r}
+d_dailyavg <- d %>% 
+  mutate(
+    day = floor_date(time, unit = "day")) %>%
+  group_by(day) %>%
+  summarize(
+    temp_c_avg = mean(Temp_C),
+    temp_c_min = min(Temp_C),
+    temp_c_max = max(Temp_C))
+
+# show file size difference from original
+write_csv(d_dailyavg, csv_dailyavg)
+file_size(c(tsv, csv_dailyavg))
+
+# convert to xts for dygraph
+x_dailyavg <- d_dailyavg
+x_dailyavg <- xts(select(x_dailyavg, -day), order.by=x_dailyavg$day) 
+
+dygraph(x_dailyavg, main="Daily Temperature (ºC)") %>%
+  dySeries(
+    c("temp_c_min",
+      "temp_c_avg",
+      "temp_c_max"),
+    label = "Daily Temperature (ºC)",
+    color = "orangered") %>% 
+  dyOptions(
+    fillGraph = FALSE, fillAlpha = 0.4) %>%
+  dyRangeSelector() 
+```
+
+## 4. Quantiles over day
+
+
+```{r}
+d_dailyq <- d %>% 
+  mutate(
+    day = floor_date(time, unit = "day")) %>%
+  group_by(day) %>%
+  summarize(
+    temp_c_q10 = quantile(Temp_C, 0.1),
+    temp_c_q90 = quantile(Temp_C, 0.9),
+    temp_c_avg = mean(Temp_C),
+    temp_c_min = min(Temp_C),
+    temp_c_max = max(Temp_C))
+
+# show file size difference from original
+write_csv(d_dailyq, csv_dailyq)
+file_size(c(tsv, csv_dailyq))
+
+# convert to xts for dygraph
+x_dailyq <- d_dailyq
+x_dailyq <- xts(select(x_dailyq, -day), order.by=x_dailyq$day) 
+
+dygraph(x_dailyq, main="Daily Temperature") %>%
+  dySeries(
+    c("temp_c_min",
+      "temp_c_avg",
+      "temp_c_max"),
+    label = " ",
+    color = "orangered") %>% 
+  dyAxis("y", label = " ") %>% 
+  dySeries(
+    c("temp_c_q10",
+      "temp_c_avg",
+      "temp_c_q90"),
+    label = "avg ºC",
+    color = "orangered") %>% 
+  dyOptions(
+    fillGraph = FALSE, fillAlpha = 0.4) %>%
+  dyRangeSelector() 
+```
+
+Daily average temperature (red line) with shading to indicate min/max (lightest orange) and quantiles 10% and 90% (darker orange).
+
+# Mapping: sorting zones and locations
+
+## Combine metadata for each site
+
+```{r}
+# read metadata
+robo_reference <- read_csv("ben_best_roboreference20201030.csv") 
+robo_metadata  <- read_csv("Robomussel metadata.csv") %>% 
+  rename(
+    microsite_id   = `microsite id`,
+    logger_type    = `logger type`,
+    tidal_height_m = `tidal height (m)`,
+    wave_exposure  = `wave exposure`,
+    start_date     = `start date`,
+    end_date       = `end date`
+    )
+
+robo_files <- list.files(path = dir_gdata, pattern = "*.txt", full.names = TRUE)
+
+loggerID <- rep(NA, length.out = length(robo_files))
+
+# keep only logger name from each file's name
+for (i in 1:length(robo_files)){
+  loggerID[i] <- sub("\\_.*", "", basename(file_path_sans_ext(robo_files[i])))
+  }
+
+# copy all info from robo_metadata into dataframe
+robo_list <- tibble(loggerID) 
+robo_list <- 
+  semi_join(
+    x = robo_metadata, y = robo_list,
+    by = c("microsite_id" = "loggerID")) %>% 
+  left_join(
+    y = robo_reference,
+    by = c("site" = "robo_location"),
+    keep = FALSE ) %>%
+  group_by(site) %>% 
+  mutate(loggers_per_site = n()) %>% 
+  ungroup() %>% 
+  # remove duplicate columns
+  # (latitude = robo_latitude, longitude = robo_longitude, location = marine_site_name)
+  select(
+    -latitude, -longitude, -marine_site_name) 
+
+```
+
+## Location (map of all locations & zones)
+
+### Label styles and color palettes
+
+```{r}
+label_style_normal <- list(
+  "color"        =  "black",
+  "font-family"  =  "default",
+  "box-shadow"   =  "3px 3px rgba(0,0,0,0.25)",
+  "font-size"    =  "11px",
+  "border-color" =  "rgba(0,0,0,0.5)"
+  )
+  
+label_style_bold <- list(
+  "color"        =  "black",
+  "font-family"  =  "default",
+  "font-weight"  =  "bold",
+  "box-shadow"   =  "3px 3px rgba(0,0,0,0.25)",
+  "font-size"    =  "15px",
+  "border-color" =  "rgba(0,0,0,0.5)"
+  )
+
+label_style_sites <-list(
+  "color"        =  "white",
+  "font-style"   =  "italic",
+  "font-family"  =  "default",
+  "font-size"    =  "12px"
+  )
+
+# Discrete color palette by site
+pal_sites <- colorFactor(
+  palette = "Dark2",
+  domain = robo_list$location
+  )
+
+pal_zones <- colorFactor(
+  palette = "YlOrBr",
+  domain = robo_list$zone
+  )
+```
+
+### Map of all sites
+
+```{r}
+# good but problem: only plotting one logger per site if multiple loggers with 
+# same robo_longtitude and robo_latitude 
+# solution: Marker Clusters
+
+# would be cool to find spatial data (polygons) for each site to make outline using that instead of with rectangles
+# also would like to map temp data and color markers according to zone (requires custom marker PNGs)
+
+sites_map <- leaflet(data = robo_list) %>% 
+  addProviderTiles(
+    providers$Esri.WorldImagery,
+    providerTileOptions(detectRetina = T)
+    ) %>% 
+  addMarkers(
+    lat = ~robo_latitude,
+    lng = ~robo_longitude,
+    group = "Loggers", 
+    label = ~microsite_id,
+    clusterOptions = markerClusterOptions(),
+    labelOptions = labelOptions(
+      direction = "bottom",
+      offset = c(2,2), sticky = T,
+      style = label_style_normal
+      ),
+    popup = paste0(
+      "Logger: ", robo_list$microsite_id, "<br>",
+      "Zone: ", robo_list$zone, "<br>",
+      robo_list$location, ", ", robo_list$region, "<br>",
+      "(", robo_list$robo_latitude, "ºN, ",
+      robo_list$robo_longitude, " ºW)", sep = "", "<br>"
+      ),
+    popupOptions = popupOptions(
+      maxWidth = 300, minWidth = 50, maxHeight = NULL,
+      autoPan = T, keepInView = F, closeButton = T
+      )
+    ) %>%
+  addLabelOnlyMarkers(
+    lat = ~marine_latitude, lng = ~marine_longitude,
+    label = ~location,
+    group = "Sites",
+    labelOptions = labelOptions(
+      direction = "left",
+      offset = c(-30,10), sticky = T,
+      noHide = T, textOnly = T,
+      style = label_style_sites
+      )
+    ) %>% 
+  addRectangles(
+    lat1 = (~marine_latitude - .5), lat2 = (~marine_latitude + .5),
+    lng1 = (~marine_longitude - .5), lng2 = (~marine_longitude + .5),
+    label = ~location,
+    fillColor = "transparent",
+    group = "Sites",
+    fillOpacity = 0.5, color = ~pal_sites(location),
+    labelOptions = labelOptions(
+      direction = "left",
+      offset = c(-30,10), sticky = T,
+      noHide = F, 
+      style = label_style_bold
+      )
+    ) %>% 
+  setView(
+    lat = mean(robo_list$robo_latitude),
+    lng = mean(robo_list$robo_longitude), 
+    zoom = 7) %>%
+  addEasyButton(
+    easyButton(
+      icon="fa-globe",
+      title="Zoom out to level 1",
+      onClick=JS("function(btn, map){ map.setZoom(1); }")
+      )
+    ) %>% 
+  addLegend(
+    position = "bottomright", opacity = 0.8,
+    pal = pal_sites, values = ~location,
+    group = "Sites",
+    title = "Site"
+    ) %>% 
+  addMiniMap(
+    position = "topright",
+    tiles = providers$Esri.WorldImagery,
+    toggleDisplay = T, 
+    height = 70, width = 70
+    ) %>% 
+  addLayersControl(
+    overlayGroups = c("Loggers", "Sites"),
+    options = layersControlOptions(collapsed = FALSE)
+    )
+
+sites_map  
+
+```
+
+### Map of individual logger
+
+(Ideally want to work on customizing marker colors according to zone)
+
+```{r}
+# filter out data for each individual logger
+for (i in 1:nrow(robo_list)) {
+  robo_list_i <- robo_list[i,]
+  assign(paste0("robo_list_", i), robo_list_i)
+}
+
+# one individual logger map (logger 11)
+indiv_logger_map <- leaflet(data = robo_list_11) %>% 
+  addProviderTiles(
+    providers$Esri.WorldImagery,
+    providerTileOptions(detectRetina = T)
+    ) %>% 
+  addMarkers(
+    lat = ~robo_latitude,
+    lng = ~robo_longitude,
+    group = "Loggers", 
+    label = ~microsite_id,
+    labelOptions = labelOptions(
+      direction = "bottom",
+      offset = c(2,2), sticky = T,
+      style = label_style_normal
+      ),
+    popup = paste0(
+      "Logger: ", robo_list_11$microsite_id, "<br>",
+      "Zone: ", robo_list_11$zone, "<br>",
+      robo_list_11$location, ", ", robo_list_11$region, "<br>",
+      "(", robo_list_11$robo_latitude, "ºN, ",
+      robo_list_11$robo_longitude, " ºW)", sep = "", "<br>"
+      ),
+    popupOptions = popupOptions(
+      maxWidth = 300, minWidth = 50, maxHeight = NULL,
+      autoPan = T, keepInView = F, closeButton = T
+      )
+    ) %>%
+  addLabelOnlyMarkers(
+    lat = ~marine_latitude, lng = ~marine_longitude,
+    label = ~location,
+    group = "Sites",
+    labelOptions = labelOptions(
+      direction = "left",
+      offset = c(-30,10), sticky = T,
+      noHide = T, textOnly = T,
+      style = label_style_sites
+      )
+    ) %>% 
+  addRectangles(
+    lat1 = (~marine_latitude - .5), lat2 = (~marine_latitude + .5),
+    lng1 = (~marine_longitude - .5), lng2 = (~marine_longitude + .5),
+    label = ~location,
+    fillColor = "transparent",
+    group = "Sites",
+    fillOpacity = 0.5, color = ~pal_sites(location),
+    labelOptions = labelOptions(
+      direction = "left",
+      offset = c(-30,10), sticky = T,
+      noHide = F, 
+      style = label_style_bold
+      )
+    ) %>% 
+  setView(
+    lat = mean(robo_list_11$robo_latitude),
+    lng = mean(robo_list_11$robo_longitude), 
+    zoom = 7) %>%
+  addEasyButton(
+    easyButton(
+      icon="fa-globe",
+      title="Zoom out to level 1",
+      onClick=JS("function(btn, map){ map.setZoom(1); }")
+      )
+    ) %>% 
+  addLegend(
+    position = "bottomright", opacity = 0.8,
+    pal = pal_sites, values = ~location,
+    group = "Sites",
+    title = "Site"
+    ) %>% 
+  addMiniMap(
+    position = "topright",
+    tiles = providers$Esri.WorldImagery,
+    toggleDisplay = T, 
+    height = 70, width = 70
+    ) %>% 
+  addLayersControl(
+    overlayGroups = c("Loggers", "Sites"),
+    options = layersControlOptions(collapsed = FALSE)
+    )
+
+indiv_logger_map
+
+
+```
+
+### Map for every individual logger
+
+```{r}
+
+for (i in 1:nrow(robo_list)) {
+  
+  robo_list_i <- robo_list[i,]
+  
+  indiv_logger_map_i <- leaflet(data = robo_list_i) %>% 
+    addProviderTiles(
+      providers$Esri.WorldImagery,
+      providerTileOptions(detectRetina = T)
+      ) %>% 
+    addMarkers(
+      lat = ~robo_latitude,
+      lng = ~robo_longitude,
+      group = "Loggers", 
+      label = ~microsite_id,
+      labelOptions = labelOptions(
+        direction = "bottom",
+        offset = c(2,2), sticky = T,
+        style = label_style_normal
+        ),
+      popup = paste0(
+        "Logger: ", robo_list_i$microsite_id, "<br>",
+        "Zone: ", robo_list_i$zone, "<br>",
+        robo_list_i$location, ", ", robo_list_i$region, "<br>",
+        "(", robo_list_i$robo_latitude, "ºN, ",
+        robo_list_i$robo_longitude, " ºW)", sep = "", "<br>"
+        ),
+      popupOptions = popupOptions(
+        maxWidth = 300, minWidth = 50, maxHeight = NULL,
+        autoPan = T, keepInView = F, closeButton = T
+        )
+      ) %>%
+    addLabelOnlyMarkers(
+      lat = ~marine_latitude, lng = ~marine_longitude,
+      label = ~location,
+      group = "Sites",
+      labelOptions = labelOptions(
+        direction = "left",
+        offset = c(-30,10), sticky = T,
+        noHide = T, textOnly = T,
+        style = label_style_sites
+        )
+      ) %>% 
+    addRectangles(
+      lat1 = (~marine_latitude - .5), lat2 = (~marine_latitude + .5),
+      lng1 = (~marine_longitude - .5), lng2 = (~marine_longitude + .5),
+      label = ~location,
+      fillColor = "transparent",
+      group = "Sites",
+      fillOpacity = 0.5, color = ~pal_sites(location),
+      labelOptions = labelOptions(
+        direction = "left",
+        offset = c(-30,10), sticky = T,
+        noHide = F, 
+        style = label_style_bold
+        )
+      ) %>% 
+    setView(
+      lat = mean(robo_list_i$robo_latitude),
+      lng = mean(robo_list_i$robo_longitude), 
+      zoom = 7) %>%
+    addEasyButton(
+      easyButton(
+        icon="fa-globe",
+        title="Zoom out to level 1",
+        onClick=JS("function(btn, map){ map.setZoom(1); }")
+        )
+      ) %>% 
+    addLegend(
+      position = "bottomright", opacity = 0.8,
+      pal = pal_sites, values = ~location,
+      group = "Sites",
+      title = "Site"
+      ) %>% 
+    addMiniMap(
+      position = "topright",
+      tiles = providers$Esri.WorldImagery,
+      toggleDisplay = T, 
+      height = 70, width = 70
+      ) %>% 
+    addLayersControl(
+      overlayGroups = c("Loggers", "Sites"),
+      options = layersControlOptions(collapsed = FALSE)
+    )
+  
+  assign(paste0("indiv_logger_map_", i), indiv_logger_map_i)
+  
+}
+
+# example
+indiv_logger_map_30
+
+
+```
+
+# Associate P2P sites with MARINe
+
+
+Get [Pole to Pole](https://marinebon.org/p2p) sites:
+
+```{r}
+d_psites <- read_csv(here("data/p2p_sites.csv")) %>% 
+  st_as_sf(
+    coords = c("lon", "lat"), remove = F,
+    crs    = 4326) # geographic coordinate ref system
+
+leaflet(d_psites) %>% 
+  addProviderTiles(providers$Esri.OceanBasemap) %>% 
+  addMarkers()
+```
+
+
+Get MARINe sites.
+
+```{r}
+d_msites <- read_csv("Robomussel metadata.csv")
+d_files  <- tibble(
+  path            = list.files(dir_gdata, ".*\\.txt", full.names = T),
+  file            = basename(path),
+  microsite_year  = file %>% path_ext_remove()) %>% 
+  separate(microsite_year, c("msite", "year"), "_", convert = T) 
+
+d_msites %>% 
+  datatable()
+```
+
+

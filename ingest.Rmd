@@ -659,8 +659,7 @@ d_msites <- read_csv("Robomussel metadata.csv") %>%
     tidal_height_m = `tidal height (m)`,
     wave_exposure  = `wave exposure`,
     start_date     = `start date`,
-    end_date       = `end date`
-    )
+    end_date       = `end date`)
   
 d_files  <- tibble(
   path            = list.files(dir_gdata, ".*\\.txt", full.names = T),
@@ -669,15 +668,15 @@ d_files  <- tibble(
   separate(microsite_year, c("msite", "year"), "_", convert = T)
 
 # join file names with their associated metadata
-d_sites <-
+d_sites <- d_files %>% 
   left_join(
-    x = d_files, y = d_msites, by = c("msite" = "microsite_id")
-    ) %>% 
-  group_by(site, zone) %>% 
+    d_msites, by = c("msite" = "microsite_id")) %>% 
+  #group_by(site, zone) %>% 
   drop_na()
 ```
 
 ### Sort out temp files according to site (start with initial robomussel data)
+
 ```{r}
 # Filter data by each combination of site and zone
 d_filtered <- split(d_sites, list(d_sites$site, d_sites$zone), drop = T, sep = "_")
@@ -705,7 +704,6 @@ dataCombiner <- function(data_site_zone) {
       zone = zone) %>% 
     relocate(site)
 }
-
 
 # we only really want daily quantiles data (no xts conversion, yet)
 dailyQuantilesData <- function(data) {
@@ -746,12 +744,11 @@ dailyQuantiles_xts <- function(data) {
   return(x_dailyq)
 }
   
-
 # loop through all site & zone combinations and store dailyq for each in a list
-dailyq <- list()
+dailyq   <- list()
 x_dailyq <- list() 
 
-for (i in 1:length(d_filtered)){
+for (i in 1:length(d_filtered)){ # i = 1
   
   # combine data for all zones of each site
   d_site_zone <- dataCombiner(data_site_zone = d_filtered[[i]])
@@ -770,25 +767,68 @@ for (i in 1:length(d_filtered)){
   
   dailyq[[stringname]] <- d_dailyq
   
+  table(dailyq[["USCABD_High_dailyq"]]$metric)
+  
   #x_dailyq[[stringname]] <- x_dailyq
   #assign(paste0("d_dailyq_", site_zone ), d_dailyq )
   #assign(paste0("x_dailyq_", site_zone ), x_dailyq )
 }
+
+# Adding missing grouping variables: `day`
+# There were 34 warnings (use warnings() to see them)
+# > warnings()
+# Warning messages:
+# 1: attributes are not identical across measure variables;
 ```
 
 
 ```{r}
 # bind rows of list elements according to whether site names match
-bind_rows(x_dailyq)
+# x <- bind_rows(x_dailyq)
 
+d <- bind_rows(dailyq)
+
+zones <- c("Low", "Lower-Mid", "Mid", "Upper-Mid", "High")
+
+site <- d$site[1]
 
 # plot
+d_site <- d %>% 
+  filter(site == !!site) %>% 
+  ungroup()
+
+table(d_site$metric)
+
+d_site_avg <- d_site %>% 
+  filter(metric == "temp_c_avg") %>% 
+  select(-site, -metric) %>% 
+  mutate(
+    zone = factor(zone, zones, ordered = T)) %>% 
+  arrange(zone, day) %>% 
+  pivot_wider(day, names_from = zone, values_from = Temp_C)  
+  arrange(day) 
+  
+d_site_avg
+
+# table(d$zone)
+levels(d_site_avg$zone)
+
+x_avg <- xts(select(d_site_avg, -day), order.by=d_site_avg$day) 
+
+# names(x_avg)
+
+pal  <- rev(RColorBrewer::brewer.pal(5, "Spectral"))
+cols <- setNames(pal, zones)
+
+dygraph(x_avg, main="Daily Temperature") %>%
+  dyHighlight(
+    highlightCircleSize = 5, 
+    highlightSeriesBackgroundAlpha = 0.2,
+    hideOnMouseOut = FALSE) %>%
+    dyOptions(
+      colors = as.character(cols[names(x_avg)]))
 
 
-x_dailyq <- d_dailyq
-x_dailyq <- xts(select(x_dailyq, -day), order.by=x_dailyq$day) 
-
-dygraph(x_dailyq, main="Daily Temperature") %>%
   dySeries(
     c("temp_c_min",
       "temp_c_avg",
@@ -806,15 +846,8 @@ dygraph(x_dailyq, main="Daily Temperature") %>%
     fillGraph = FALSE, fillAlpha = 0.4) %>%
   dyRangeSelector() 
 
-
-  
-
-
-
-
-
-
 ```
+
 # Extras 
 
 ```{r functions for smoothing}

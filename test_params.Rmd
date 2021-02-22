@@ -1,0 +1,18 @@
+---
+title: "test_params"
+output: html_document
+params:
+  n_bins: 10
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## plot
+
+```{r}
+x <- runif(100)
+hist(x, breaks = params$n_bins)
+```
+
