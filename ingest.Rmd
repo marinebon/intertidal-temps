@@ -779,7 +779,7 @@ for (i in 1:length(d_filtered)){
 
 ```{r}
 # bind rows of list elements according to whether site names match
-bind_rows(x_dailyq)
+bind_rows()
 
 
 # plot
