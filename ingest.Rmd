@@ -671,7 +671,7 @@ d_mfiles  <- tibble(
 d_msites <- d_mfiles %>% 
   left_join(
     d_msites, by = c("msite" = "microsite_id")) %>% 
-  drop_na()
+  drop_na() # sum(is.na(d_msites$site)): n = 2
 
 # convert to sf for joining with p2p
 d_msites_sf <- d_msites %>% 
@@ -683,15 +683,70 @@ d_msites_sf <- d_msites %>%
 ### Join MARINe and p2p sites by nearest feature
 
 ```{r}
-sites_joined <- st_join(d_msites_sf, d_psites_sf, join = st_nearest_feature) %>% 
-  select(-country.y) %>% 
-  rename(country = country.x)
+sites_joined <- st_join(
+  d_msites_sf, 
+  d_psites_sf %>% 
+    select(-country) %>% 
+    rename(pgeometry = geometry), 
+  join = st_nearest_feature)
+
+xy2pt <- function(x, y){
+  st_point(c(x, y)) %>% 
+          st_sfc(crs = 4326)
+}
+
+sites_joined <- sites_joined %>% 
+  st_drop_geometry() %>% 
+  mutate(
+    geom_marine = map2(longitude, latitude, xy2pt),
+    geom_p2p    = map2(lon      , lat     , xy2pt),
+    dist_km     = map2_dbl(geom_marine, geom_p2p, st_distance) / 1000) %>% 
+  st_as_sf(
+    coords = c("lon", "lat"), remove = F,
+    crs    = 4326)
+
+sites_joined %>% 
+  filter(dist_km < 2) %>% # 
+  pull(dist_km) %>% 
+  hist()
+
+
+sites_joined$dist_m[[1]]
+
+near_m2p <- st_nearest_points(d_msites_sf, d_psites_sf) %>% 
+  st_as_sf() %>% 
+  mutate(
+    dist_km = st_distance(x))
+  
+sites_joined %>% 
+  pull(msite) %>% 
+  unique() %>% 
+  length() # 65
 
 # plot
 leaflet(sites_joined) %>% 
   addProviderTiles(providers$Esri.OceanBasemap) %>% 
-  addMarkers()
+  addMarkers(
+    clusterOptions
+  )
 ```
+
+
+Possible ToDos 2021-02-24:
+
+- Finish merging these 4 sites that are reasonably close to a P2P site
+
+- Start exploring P2P Robolimpet data here:
+  - Ben's path of an example: `/Volumes/GoogleDrive/My Drive/projects/mbon-p2p/Robolimpets/Data/Argentina/Gregorio/data/0444 B300 C717 08-20190301 130640.csv`
+  
+```{r}
+dir_p2p_robo <- "/Volumes/GoogleDrive/My Drive/projects/mbon-p2p/Robolimpets"
+list.files(
+  dir_p2p_robo, ".*\\.csv$", 
+  recursive = T, full.names = T) # 14 CSVs
+```
+
+  - 
 
 ## Functions for combining & smoothing temp data
 
