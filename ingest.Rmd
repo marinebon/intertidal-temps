@@ -891,7 +891,7 @@ for (i in 1:length(levels(d$site))) { # for each site i
     pivot_wider(day, names_from = zone, values_from = Temp_C) %>% 
     arrange(day) 
   
-  write.csv(
+  write_csv(
     d_site_avg,
     paste0(getwd(), "/data_smoothed/", site, ".csv"))
   
@@ -932,7 +932,9 @@ pal  <- c("#3D2C9A", "#3E98C5", "#4A9A78", "#F7BD33", "#D74B00")
 cols <- setNames(pal, zones)
 
 # test
-d_test <- read_csv(here::here("data_smoothed/USCABD.csv"))
+d_test <- read_csv(here::here("data_smoothed/USCABD.csv")) %>% 
+  select(-X1)
+
 x_avg <- xts(select(d_test, -day), order.by = d_test$day) 
 View(x_avg)
 ```
