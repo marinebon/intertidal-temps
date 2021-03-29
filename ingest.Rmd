@@ -33,7 +33,7 @@ librarian::shelf(
   #spatial
   sf, leaflet, leaflet.extras,
   # tidyverse
-  fs, glue, here, lubridate, stringr, tidyverse)
+  fs, glue, here, lubridate, stringr, tidyverse, purrr)
 
 # paths & variables
 user <- Sys.info()[["user"]]
@@ -643,15 +643,66 @@ indiv_logger_map_30
 dir_p2p_robo <-
   case_when(
     user == "bbest"       ~ "/Volumes/GoogleDrive/My Drive/projects/mbon-p2p/Robolimpets",
-    user == "cdobbelaere" ~ here::here("robomussels/Robolimpets"))
-    # user == "cdobbelaere" ~ here::here("robomussels/Robolimpets/Data/Argentina/Gregorio/data"))
-
+    # user == "cdobbelaere" ~ "/Users/cdobbelaere/Documents/robomussels/Robolimpets")
+    user == "cdobbelaere" ~ here::here("../Robolimpets"))
   
-# something going wrong here... can't find the files
-list.files(
+paths <- list.files(
   dir_p2p_robo, ".*\\.csv$", 
   recursive = T, full.names = T,
   include.dirs = T) # 14 CSVs
+
+# find where metadata ends (from github help):
+find_skip <- function(file, pattern, n = 20) { 
+  min(grep(pattern, read_lines(file, n_max = n)))
+}
+
+# function to read temp csv files
+read_tempcsv <- function(path) {
+  tibble(
+    read_csv(
+      path,
+      skip = (find_skip(file = path, pattern = "^time,") - 1))) %>% 
+    drop_na()
+}
+
+
+
+# read metadata...not perfect yet
+read_metadata <- function(path) {
+  
+  # if metadata present:
+  if (find_skip(file = path, pattern = "^time,") != Inf) {
+    metadata <- tibble(
+      metadata = read_lines(
+        path, n_max = (find_skip(file = path, pattern = "^time,") - 1))) %>% 
+        # textclean::replace_non_ascii(replacement = "")) %>% 
+      mutate_if(is.character, function(x) {Encoding(x) <- "latin1"; return(x)}) %>%
+      filter(str_detect(metadata, ":")) %>% 
+      separate(metadata, c("key", "value"), ": ", convert = T) %>% 
+      pivot_wider(names_from = "key", values_from = "value")
+    if ("coords" %in% colnames(metadata)) {
+      metadata <- metadata %>%
+        separate(coords, c("lat", "lon"), ", ")
+    }
+    metadata <- metadata %>% mutate_all(list(~gsub(",", "", .)))
+    
+  # if no metadata present:
+  } else metadata <- read_csv(path)
+  if ("X1" %in% colnames(metadata)) {
+    metadata <- metadata %>% select(-X1)
+  }
+  return(metadata)
+}
+
+# read all csv files and combine data & metadata
+d <- tibble(
+  path     = paths,
+  file     = basename(path),
+  data     = map(path, read_tempcsv),
+  metadata = map(path, read_metadata))
+
+# 7 has no metadata, just temp data
+# 13 has a weird character that needs to be removed
 ```
 
 
