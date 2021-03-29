@@ -254,385 +254,7 @@ dygraph(x_dailyq, main="Daily Temperature") %>%
 
 Daily average temperature (red line) with shading to indicate min/max (lightest orange) and quantiles 10% and 90% (darker orange).
 
-# Mapping: sorting zones and locations
-
-## Combine metadata for each site
-
-```{r}
-# read metadata
-robo_reference <- read_csv("ben_best_roboreference20201030.csv") 
-robo_metadata  <- read_csv("Robomussel metadata.csv") %>% 
-  rename(
-    microsite_id   = `microsite id`,
-    logger_type    = `logger type`,
-    tidal_height_m = `tidal height (m)`,
-    wave_exposure  = `wave exposure`,
-    start_date     = `start date`,
-    end_date       = `end date`
-    )
-
-robo_files <- list.files(path = dir_gdata, pattern = "*.txt", full.names = TRUE)
-
-loggerID <- rep(NA, length.out = length(robo_files))
-
-# keep only logger name from each file's name
-for (i in 1:length(robo_files)){
-  loggerID[i] <- sub("\\_.*", "", basename(file_path_sans_ext(robo_files[i])))
-  }
-
-# copy all info from robo_metadata into dataframe
-robo_list <- tibble(loggerID) 
-robo_list <- 
-  semi_join(
-    x = robo_metadata, y = robo_list,
-    by = c("microsite_id" = "loggerID")) %>% 
-  left_join(
-    y = robo_reference,
-    by = c("site" = "robo_location"),
-    keep = FALSE ) %>%
-  group_by(site) %>% 
-  mutate(loggers_per_site = n()) %>% 
-  ungroup() %>% 
-  # remove duplicate columns
-  # (latitude = robo_latitude, longitude = robo_longitude, location = marine_site_name)
-  select(
-    -latitude, -longitude, -marine_site_name) 
-
-```
-
-## Location (map of all locations & zones)
-
-### Label styles and color palettes
-
-```{r}
-label_style_normal <- list(
-  "color"        =  "black",
-  "font-family"  =  "default",
-  "box-shadow"   =  "3px 3px rgba(0,0,0,0.25)",
-  "font-size"    =  "11px",
-  "border-color" =  "rgba(0,0,0,0.5)"
-  )
-  
-label_style_bold <- list(
-  "color"        =  "black",
-  "font-family"  =  "default",
-  "font-weight"  =  "bold",
-  "box-shadow"   =  "3px 3px rgba(0,0,0,0.25)",
-  "font-size"    =  "15px",
-  "border-color" =  "rgba(0,0,0,0.5)"
-  )
-
-label_style_sites <-list(
-  "color"        =  "white",
-  "font-style"   =  "italic",
-  "font-family"  =  "default",
-  "font-size"    =  "12px"
-  )
-
-# Discrete color palette by site
-pal_sites <- colorFactor(
-  palette = "Dark2",
-  domain = robo_list$location
-  )
-
-pal_zones <- colorFactor(
-  palette = "YlOrBr",
-  domain = robo_list$zone
-  )
-```
-
-### Map of all sites
-
-```{r}
-# good but problem: only plotting one logger per site if multiple loggers with 
-# same robo_longtitude and robo_latitude 
-# solution: Marker Clusters
-
-# would be cool to find spatial data (polygons) for each site to make outline using that instead of with rectangles
-# also would like to map temp data and color markers according to zone (requires custom marker PNGs)
-
-sites_map <- leaflet(data = robo_list) %>% 
-  addProviderTiles(
-    providers$Esri.WorldImagery,
-    providerTileOptions(detectRetina = T)
-    ) %>% 
-  addMarkers(
-    lat = ~robo_latitude,
-    lng = ~robo_longitude,
-    group = "Loggers", 
-    label = ~microsite_id,
-    clusterOptions = markerClusterOptions(),
-    labelOptions = labelOptions(
-      direction = "bottom",
-      offset = c(2,2), sticky = T,
-      style = label_style_normal
-      ),
-    popup = paste0(
-      "Logger: ", robo_list$microsite_id, "<br>",
-      "Zone: ", robo_list$zone, "<br>",
-      robo_list$location, ", ", robo_list$region, "<br>",
-      "(", robo_list$robo_latitude, "ºN, ",
-      robo_list$robo_longitude, " ºW)", sep = "", "<br>"
-      ),
-    popupOptions = popupOptions(
-      maxWidth = 300, minWidth = 50, maxHeight = NULL,
-      autoPan = T, keepInView = F, closeButton = T
-      )
-    ) %>%
-  addLabelOnlyMarkers(
-    lat = ~marine_latitude, lng = ~marine_longitude,
-    label = ~location,
-    group = "Sites",
-    labelOptions = labelOptions(
-      direction = "left",
-      offset = c(-30,10), sticky = T,
-      noHide = T, textOnly = T,
-      style = label_style_sites
-      )
-    ) %>% 
-  addRectangles(
-    lat1 = (~marine_latitude - .5), lat2 = (~marine_latitude + .5),
-    lng1 = (~marine_longitude - .5), lng2 = (~marine_longitude + .5),
-    label = ~location,
-    fillColor = "transparent",
-    group = "Sites",
-    fillOpacity = 0.5, color = ~pal_sites(location),
-    labelOptions = labelOptions(
-      direction = "left",
-      offset = c(-30,10), sticky = T,
-      noHide = F, 
-      style = label_style_bold
-      )
-    ) %>% 
-  setView(
-    lat = mean(robo_list$robo_latitude),
-    lng = mean(robo_list$robo_longitude), 
-    zoom = 7) %>%
-  addEasyButton(
-    easyButton(
-      icon="fa-globe",
-      title="Zoom out to level 1",
-      onClick=JS("function(btn, map){ map.setZoom(1); }")
-      )
-    ) %>% 
-  addLegend(
-    position = "bottomright", opacity = 0.8,
-    pal = pal_sites, values = ~location,
-    group = "Sites",
-    title = "Site"
-    ) %>% 
-  addMiniMap(
-    position = "topright",
-    tiles = providers$Esri.WorldImagery,
-    toggleDisplay = T, 
-    height = 70, width = 70
-    ) %>% 
-  addLayersControl(
-    overlayGroups = c("Loggers", "Sites"),
-    options = layersControlOptions(collapsed = FALSE)
-    )
-
-sites_map  
-
-```
-
-### Map of individual logger
-
-(Ideally want to work on customizing marker colors according to zone)
-
-```{r}
-# filter out data for each individual logger
-for (i in 1:nrow(robo_list)) {
-  robo_list_i <- robo_list[i,]
-  assign(paste0("robo_list_", i), robo_list_i)
-}
-
-# one individual logger map (logger 11)
-indiv_logger_map <- leaflet(data = robo_list_11) %>% 
-  addProviderTiles(
-    providers$Esri.WorldImagery,
-    providerTileOptions(detectRetina = T)
-    ) %>% 
-  addMarkers(
-    lat = ~robo_latitude,
-    lng = ~robo_longitude,
-    group = "Loggers", 
-    label = ~microsite_id,
-    labelOptions = labelOptions(
-      direction = "bottom",
-      offset = c(2,2), sticky = T,
-      style = label_style_normal
-      ),
-    popup = paste0(
-      "Logger: ", robo_list_11$microsite_id, "<br>",
-      "Zone: ", robo_list_11$zone, "<br>",
-      robo_list_11$location, ", ", robo_list_11$region, "<br>",
-      "(", robo_list_11$robo_latitude, "ºN, ",
-      robo_list_11$robo_longitude, " ºW)", sep = "", "<br>"
-      ),
-    popupOptions = popupOptions(
-      maxWidth = 300, minWidth = 50, maxHeight = NULL,
-      autoPan = T, keepInView = F, closeButton = T
-      )
-    ) %>%
-  addLabelOnlyMarkers(
-    lat = ~marine_latitude, lng = ~marine_longitude,
-    label = ~location,
-    group = "Sites",
-    labelOptions = labelOptions(
-      direction = "left",
-      offset = c(-30,10), sticky = T,
-      noHide = T, textOnly = T,
-      style = label_style_sites
-      )
-    ) %>% 
-  addRectangles(
-    lat1 = (~marine_latitude - .5), lat2 = (~marine_latitude + .5),
-    lng1 = (~marine_longitude - .5), lng2 = (~marine_longitude + .5),
-    label = ~location,
-    fillColor = "transparent",
-    group = "Sites",
-    fillOpacity = 0.5, color = ~pal_sites(location),
-    labelOptions = labelOptions(
-      direction = "left",
-      offset = c(-30,10), sticky = T,
-      noHide = F, 
-      style = label_style_bold
-      )
-    ) %>% 
-  setView(
-    lat = mean(robo_list_11$robo_latitude),
-    lng = mean(robo_list_11$robo_longitude), 
-    zoom = 7) %>%
-  addEasyButton(
-    easyButton(
-      icon="fa-globe",
-      title="Zoom out to level 1",
-      onClick=JS("function(btn, map){ map.setZoom(1); }")
-      )
-    ) %>% 
-  addLegend(
-    position = "bottomright", opacity = 0.8,
-    pal = pal_sites, values = ~location,
-    group = "Sites",
-    title = "Site"
-    ) %>% 
-  addMiniMap(
-    position = "topright",
-    tiles = providers$Esri.WorldImagery,
-    toggleDisplay = T, 
-    height = 70, width = 70
-    ) %>% 
-  addLayersControl(
-    overlayGroups = c("Loggers", "Sites"),
-    options = layersControlOptions(collapsed = FALSE)
-    )
-
-indiv_logger_map
-
-
-```
-
-### Map for every individual logger (alternative to previous chunk)
-
-```{r}
-
-for (i in 1:nrow(robo_list)) {
-  
-  robo_list_i <- robo_list[i,]
-  
-  indiv_logger_map_i <- leaflet(data = robo_list_i) %>% 
-    addProviderTiles(
-      providers$Esri.WorldImagery,
-      providerTileOptions(detectRetina = T)
-      ) %>% 
-    addMarkers(
-      lat = ~robo_latitude,
-      lng = ~robo_longitude,
-      group = "Loggers", 
-      label = ~microsite_id,
-      labelOptions = labelOptions(
-        direction = "bottom",
-        offset = c(2,2), sticky = T,
-        style = label_style_normal
-        ),
-      popup = paste0(
-        "Logger: ", robo_list_i$microsite_id, "<br>",
-        "Zone: ", robo_list_i$zone, "<br>",
-        robo_list_i$location, ", ", robo_list_i$region, "<br>",
-        "(", robo_list_i$robo_latitude, "ºN, ",
-        robo_list_i$robo_longitude, " ºW)", sep = "", "<br>"
-        ),
-      popupOptions = popupOptions(
-        maxWidth = 300, minWidth = 50, maxHeight = NULL,
-        autoPan = T, keepInView = F, closeButton = T
-        )
-      ) %>%
-    addLabelOnlyMarkers(
-      lat = ~marine_latitude, lng = ~marine_longitude,
-      label = ~location,
-      group = "Sites",
-      labelOptions = labelOptions(
-        direction = "left",
-        offset = c(-30,10), sticky = T,
-        noHide = T, textOnly = T,
-        style = label_style_sites
-        )
-      ) %>% 
-    addRectangles(
-      lat1 = (~marine_latitude - .5), lat2 = (~marine_latitude + .5),
-      lng1 = (~marine_longitude - .5), lng2 = (~marine_longitude + .5),
-      label = ~location,
-      fillColor = "transparent",
-      group = "Sites",
-      fillOpacity = 0.5, color = ~pal_sites(location),
-      labelOptions = labelOptions(
-        direction = "left",
-        offset = c(-30,10), sticky = T,
-        noHide = F, 
-        style = label_style_bold
-        )
-      ) %>% 
-    setView(
-      lat = mean(robo_list_i$robo_latitude),
-      lng = mean(robo_list_i$robo_longitude), 
-      zoom = 7) %>%
-    addEasyButton(
-      easyButton(
-        icon="fa-globe",
-        title="Zoom out to level 1",
-        onClick=JS("function(btn, map){ map.setZoom(1); }")
-        )
-      ) %>% 
-    addLegend(
-      position = "bottomright", opacity = 0.8,
-      pal = pal_sites, values = ~location,
-      group = "Sites",
-      title = "Site"
-      ) %>% 
-    addMiniMap(
-      position = "topright",
-      tiles = providers$Esri.WorldImagery,
-      toggleDisplay = T, 
-      height = 70, width = 70
-      ) %>% 
-    addLayersControl(
-      overlayGroups = c("Loggers", "Sites"),
-      options = layersControlOptions(collapsed = FALSE)
-    )
-  
-  assign(paste0("indiv_logger_map_", i), indiv_logger_map_i)
-  
-}
-
-# example
-indiv_logger_map_30
-
-```
-
-
-
-# Possible ToDos 2021-02-24:
+# 2021-02-24 POSSIBLE TO-DO's:
 
 - Finish merging these 4 sites that are reasonably close to a P2P site
 
@@ -992,13 +614,6 @@ dygraph(eval(parse(text = paste0("x_", smoothed_files$site[2]))), main = "Daily 
     fillGraph = FALSE, fillAlpha = 0.4) %>%
   dyRangeSelector() 
 
-
-
-
-
-
-
-
 # dygraph function
 dyPlot <- function(x_data, cols) {
   dygraph <- dygraph(eval(parse(text = x_data)), main = "Daily Temperature") %>%
@@ -1038,6 +653,384 @@ View(x_avg)
 
 ```
 
+
+# Mapping: sorting zones and locations
+
+## Combine metadata for each site
+
+```{r}
+# read metadata
+robo_reference <- read_csv("ben_best_roboreference20201030.csv") 
+robo_metadata  <- read_csv("Robomussel metadata.csv") %>% 
+  rename(
+    microsite_id   = `microsite id`,
+    logger_type    = `logger type`,
+    tidal_height_m = `tidal height (m)`,
+    wave_exposure  = `wave exposure`,
+    start_date     = `start date`,
+    end_date       = `end date`
+    )
+
+robo_files <- list.files(path = dir_gdata, pattern = "*.txt", full.names = TRUE)
+
+loggerID <- rep(NA, length.out = length(robo_files))
+
+# keep only logger name from each file's name
+for (i in 1:length(robo_files)){
+  loggerID[i] <- sub("\\_.*", "", basename(file_path_sans_ext(robo_files[i])))
+  }
+
+# copy all info from robo_metadata into dataframe
+robo_list <- tibble(loggerID) 
+robo_list <- 
+  semi_join(
+    x = robo_metadata, y = robo_list,
+    by = c("microsite_id" = "loggerID")) %>% 
+  left_join(
+    y = robo_reference,
+    by = c("site" = "robo_location"),
+    keep = FALSE ) %>%
+  group_by(site) %>% 
+  mutate(loggers_per_site = n()) %>% 
+  ungroup() %>% 
+  # remove duplicate columns
+  # (latitude = robo_latitude, longitude = robo_longitude, location = marine_site_name)
+  select(
+    -latitude, -longitude, -marine_site_name) 
+
+```
+
+
+# EXTRAS
+## Location (map of all locations & zones)
+
+### Label styles and color palettes
+
+```{r}
+label_style_normal <- list(
+  "color"        =  "black",
+  "font-family"  =  "default",
+  "box-shadow"   =  "3px 3px rgba(0,0,0,0.25)",
+  "font-size"    =  "11px",
+  "border-color" =  "rgba(0,0,0,0.5)"
+  )
+  
+label_style_bold <- list(
+  "color"        =  "black",
+  "font-family"  =  "default",
+  "font-weight"  =  "bold",
+  "box-shadow"   =  "3px 3px rgba(0,0,0,0.25)",
+  "font-size"    =  "15px",
+  "border-color" =  "rgba(0,0,0,0.5)"
+  )
+
+label_style_sites <-list(
+  "color"        =  "white",
+  "font-style"   =  "italic",
+  "font-family"  =  "default",
+  "font-size"    =  "12px"
+  )
+
+# Discrete color palette by site
+pal_sites <- colorFactor(
+  palette = "Dark2",
+  domain = robo_list$location
+  )
+
+pal_zones <- colorFactor(
+  palette = "YlOrBr",
+  domain = robo_list$zone
+  )
+```
+
+### Map of all sites
+
+```{r}
+# good but problem: only plotting one logger per site if multiple loggers with 
+# same robo_longtitude and robo_latitude 
+# solution: Marker Clusters
+
+# would be cool to find spatial data (polygons) for each site to make outline using that instead of with rectangles
+# also would like to map temp data and color markers according to zone (requires custom marker PNGs)
+
+sites_map <- leaflet(data = robo_list) %>% 
+  addProviderTiles(
+    providers$Esri.WorldImagery,
+    providerTileOptions(detectRetina = T)
+    ) %>% 
+  addMarkers(
+    lat = ~robo_latitude,
+    lng = ~robo_longitude,
+    group = "Loggers", 
+    label = ~microsite_id,
+    clusterOptions = markerClusterOptions(),
+    labelOptions = labelOptions(
+      direction = "bottom",
+      offset = c(2,2), sticky = T,
+      style = label_style_normal
+      ),
+    popup = paste0(
+      "Logger: ", robo_list$microsite_id, "<br>",
+      "Zone: ", robo_list$zone, "<br>",
+      robo_list$location, ", ", robo_list$region, "<br>",
+      "(", robo_list$robo_latitude, "ºN, ",
+      robo_list$robo_longitude, " ºW)", sep = "", "<br>"
+      ),
+    popupOptions = popupOptions(
+      maxWidth = 300, minWidth = 50, maxHeight = NULL,
+      autoPan = T, keepInView = F, closeButton = T
+      )
+    ) %>%
+  addLabelOnlyMarkers(
+    lat = ~marine_latitude, lng = ~marine_longitude,
+    label = ~location,
+    group = "Sites",
+    labelOptions = labelOptions(
+      direction = "left",
+      offset = c(-30,10), sticky = T,
+      noHide = T, textOnly = T,
+      style = label_style_sites
+      )
+    ) %>% 
+  addRectangles(
+    lat1 = (~marine_latitude - .5), lat2 = (~marine_latitude + .5),
+    lng1 = (~marine_longitude - .5), lng2 = (~marine_longitude + .5),
+    label = ~location,
+    fillColor = "transparent",
+    group = "Sites",
+    fillOpacity = 0.5, color = ~pal_sites(location),
+    labelOptions = labelOptions(
+      direction = "left",
+      offset = c(-30,10), sticky = T,
+      noHide = F, 
+      style = label_style_bold
+      )
+    ) %>% 
+  setView(
+    lat = mean(robo_list$robo_latitude),
+    lng = mean(robo_list$robo_longitude), 
+    zoom = 7) %>%
+  addEasyButton(
+    easyButton(
+      icon="fa-globe",
+      title="Zoom out to level 1",
+      onClick=JS("function(btn, map){ map.setZoom(1); }")
+      )
+    ) %>% 
+  addLegend(
+    position = "bottomright", opacity = 0.8,
+    pal = pal_sites, values = ~location,
+    group = "Sites",
+    title = "Site"
+    ) %>% 
+  addMiniMap(
+    position = "topright",
+    tiles = providers$Esri.WorldImagery,
+    toggleDisplay = T, 
+    height = 70, width = 70
+    ) %>% 
+  addLayersControl(
+    overlayGroups = c("Loggers", "Sites"),
+    options = layersControlOptions(collapsed = FALSE)
+    )
+
+sites_map  
+
+```
+
+### Map of individual logger
+
+(Ideally want to work on customizing marker colors according to zone)
+
+```{r}
+# filter out data for each individual logger
+for (i in 1:nrow(robo_list)) {
+  robo_list_i <- robo_list[i,]
+  assign(paste0("robo_list_", i), robo_list_i)
+}
+
+# one individual logger map (logger 11)
+indiv_logger_map <- leaflet(data = robo_list_11) %>% 
+  addProviderTiles(
+    providers$Esri.WorldImagery,
+    providerTileOptions(detectRetina = T)
+    ) %>% 
+  addMarkers(
+    lat = ~robo_latitude,
+    lng = ~robo_longitude,
+    group = "Loggers", 
+    label = ~microsite_id,
+    labelOptions = labelOptions(
+      direction = "bottom",
+      offset = c(2,2), sticky = T,
+      style = label_style_normal
+      ),
+    popup = paste0(
+      "Logger: ", robo_list_11$microsite_id, "<br>",
+      "Zone: ", robo_list_11$zone, "<br>",
+      robo_list_11$location, ", ", robo_list_11$region, "<br>",
+      "(", robo_list_11$robo_latitude, "ºN, ",
+      robo_list_11$robo_longitude, " ºW)", sep = "", "<br>"
+      ),
+    popupOptions = popupOptions(
+      maxWidth = 300, minWidth = 50, maxHeight = NULL,
+      autoPan = T, keepInView = F, closeButton = T
+      )
+    ) %>%
+  addLabelOnlyMarkers(
+    lat = ~marine_latitude, lng = ~marine_longitude,
+    label = ~location,
+    group = "Sites",
+    labelOptions = labelOptions(
+      direction = "left",
+      offset = c(-30,10), sticky = T,
+      noHide = T, textOnly = T,
+      style = label_style_sites
+      )
+    ) %>% 
+  addRectangles(
+    lat1 = (~marine_latitude - .5), lat2 = (~marine_latitude + .5),
+    lng1 = (~marine_longitude - .5), lng2 = (~marine_longitude + .5),
+    label = ~location,
+    fillColor = "transparent",
+    group = "Sites",
+    fillOpacity = 0.5, color = ~pal_sites(location),
+    labelOptions = labelOptions(
+      direction = "left",
+      offset = c(-30,10), sticky = T,
+      noHide = F, 
+      style = label_style_bold
+      )
+    ) %>% 
+  setView(
+    lat = mean(robo_list_11$robo_latitude),
+    lng = mean(robo_list_11$robo_longitude), 
+    zoom = 7) %>%
+  addEasyButton(
+    easyButton(
+      icon="fa-globe",
+      title="Zoom out to level 1",
+      onClick=JS("function(btn, map){ map.setZoom(1); }")
+      )
+    ) %>% 
+  addLegend(
+    position = "bottomright", opacity = 0.8,
+    pal = pal_sites, values = ~location,
+    group = "Sites",
+    title = "Site"
+    ) %>% 
+  addMiniMap(
+    position = "topright",
+    tiles = providers$Esri.WorldImagery,
+    toggleDisplay = T, 
+    height = 70, width = 70
+    ) %>% 
+  addLayersControl(
+    overlayGroups = c("Loggers", "Sites"),
+    options = layersControlOptions(collapsed = FALSE)
+    )
+
+indiv_logger_map
+
+
+```
+
+### Map for every individual logger (alternative to previous chunk)
+
+```{r}
+
+for (i in 1:nrow(robo_list)) {
+  
+  robo_list_i <- robo_list[i,]
+  
+  indiv_logger_map_i <- leaflet(data = robo_list_i) %>% 
+    addProviderTiles(
+      providers$Esri.WorldImagery,
+      providerTileOptions(detectRetina = T)
+      ) %>% 
+    addMarkers(
+      lat = ~robo_latitude,
+      lng = ~robo_longitude,
+      group = "Loggers", 
+      label = ~microsite_id,
+      labelOptions = labelOptions(
+        direction = "bottom",
+        offset = c(2,2), sticky = T,
+        style = label_style_normal
+        ),
+      popup = paste0(
+        "Logger: ", robo_list_i$microsite_id, "<br>",
+        "Zone: ", robo_list_i$zone, "<br>",
+        robo_list_i$location, ", ", robo_list_i$region, "<br>",
+        "(", robo_list_i$robo_latitude, "ºN, ",
+        robo_list_i$robo_longitude, " ºW)", sep = "", "<br>"
+        ),
+      popupOptions = popupOptions(
+        maxWidth = 300, minWidth = 50, maxHeight = NULL,
+        autoPan = T, keepInView = F, closeButton = T
+        )
+      ) %>%
+    addLabelOnlyMarkers(
+      lat = ~marine_latitude, lng = ~marine_longitude,
+      label = ~location,
+      group = "Sites",
+      labelOptions = labelOptions(
+        direction = "left",
+        offset = c(-30,10), sticky = T,
+        noHide = T, textOnly = T,
+        style = label_style_sites
+        )
+      ) %>% 
+    addRectangles(
+      lat1 = (~marine_latitude - .5), lat2 = (~marine_latitude + .5),
+      lng1 = (~marine_longitude - .5), lng2 = (~marine_longitude + .5),
+      label = ~location,
+      fillColor = "transparent",
+      group = "Sites",
+      fillOpacity = 0.5, color = ~pal_sites(location),
+      labelOptions = labelOptions(
+        direction = "left",
+        offset = c(-30,10), sticky = T,
+        noHide = F, 
+        style = label_style_bold
+        )
+      ) %>% 
+    setView(
+      lat = mean(robo_list_i$robo_latitude),
+      lng = mean(robo_list_i$robo_longitude), 
+      zoom = 7) %>%
+    addEasyButton(
+      easyButton(
+        icon="fa-globe",
+        title="Zoom out to level 1",
+        onClick=JS("function(btn, map){ map.setZoom(1); }")
+        )
+      ) %>% 
+    addLegend(
+      position = "bottomright", opacity = 0.8,
+      pal = pal_sites, values = ~location,
+      group = "Sites",
+      title = "Site"
+      ) %>% 
+    addMiniMap(
+      position = "topright",
+      tiles = providers$Esri.WorldImagery,
+      toggleDisplay = T, 
+      height = 70, width = 70
+      ) %>% 
+    addLayersControl(
+      overlayGroups = c("Loggers", "Sites"),
+      options = layersControlOptions(collapsed = FALSE)
+    )
+  
+  assign(paste0("indiv_logger_map_", i), indiv_logger_map_i)
+  
+}
+
+# example
+indiv_logger_map_30
+
+```
 
 
 
