@@ -18,8 +18,9 @@ knitr::opts_chunk$set(echo = T, message = F, warning = F)
 1. PROBLEM. Data is too big for simple interactive time-series plot (ie dygraphs) if on same Rmd output html page. The folder of *.csv's [robomusseldata20201030 - Google Drive](https://drive.google.com/drive/u/3/folders/1kzjZ72vFxRGsafTgCCzq6cXIhQ1GYQa3) contains 317 files totalling 236 MB. SOLUTION(s):
     1. Read into SQLite database and show as Shiny app.
 
+  
 
-## Ingest single txt
+# Load packages & user info
 
 ```{r}
 # libraries
@@ -37,6 +38,12 @@ librarian::shelf(
 
 # paths & variables
 user <- Sys.info()[["user"]]
+```
+
+
+## Ingest single txt
+
+```{r}
 # set dir_gdata as filepath for robomussels data on Google Drive
 dir_gdata <- case_when(
   #user == "bbest"       ~ "/Users/bbest/Downloads/robomusseldata20201030",
@@ -56,30 +63,12 @@ csv_dailyq       <- glue("{dir_avg}/{basename(path_ext_remove(tsv))}_dailyq.csv"
 
 stopifnot(file.exists(tsv))
 
-# read data from individual tsv files
-d <- read_tsv(tsv) %>% 
-  mutate(
-    time = parse_date_time(Time_GMT, "m/d/y H:M")) %>% # parse through datetimes, store as time col.
-  select(-Time_GMT) %>% # get rid of original time column
-  arrange(time) # d # sort by ascending time 
 
-# convert to eXtensible Time Series for dygraph
-x <- d 
-x <- xts(select(x, -time), order.by=x$time) # select only Temp_C and order by time, store as xts object 
-
-# output dygraph interactive plot
-dygraph(x, main="Temp_C") %>%
-  dyOptions(
-    colors = "red",
-    fillGraph = TRUE, fillAlpha = 0.4) %>% 
-  dyRangeSelector()
 ```
 
-# Smoothing
+### Smoothing for each indiv logger txt file
 
-## for each individual logger
-
-## 1. Hourly mean (from every 10 min)
+#### 1. Hourly mean (from every 10 min)
 
 ```{r}
 # create df containing hourly mean temp data
@@ -90,8 +79,8 @@ d_hourlymean <- d %>%
   summarize(Temp_C_hourly_mean = mean(Temp_C)) # calculate mean for each hour
 
 # show file size difference from original
-write_csv(d_hourlymean, csv_hourlymean)
-file_size(c(tsv, csv_hourlymean))
+# write_csv(d_hourlymean, csv_hourlymean)
+# file_size(c(tsv, csv_hourlymean))
 
 # convert to xts for dygraph
 x_hourlymean <- d_hourlymean
@@ -105,7 +94,7 @@ dygraph(x_hourlymean, main="Hourly_Mean_Temp_C") %>%
   dyRangeSelector()
 ```
 
-## 2. Min/max over 6 hr moving window
+#### 2. Min/max over 6 hr moving window
 (note: can do rolling averages directly in dygraphs too with dygraph() %>% dyRoller(rollPeriod = 6)
 
 ```{r}
@@ -144,40 +133,7 @@ dygraph(x_movingwindow, main="Temp_C") %>%
 # is there a way to display min/max data labels when using min/max as upper/lower bars?
 ```
 
-```{r}
-# alternative: moving min and max using original 
-# but this doesn't reduce amount of data so not ideal
-d_movingwindow_orig <- d %>% 
-  mutate(time = floor_date(time, unit = "hour")) %>% 
-  mutate(
-    Temp_C_min_06_hours  = runmin(Temp_C,  k=6, alg="C", endrule="constant", align="center"),
-    Temp_C_max_06_hours  = runmax(Temp_C,  k=6, alg="C", endrule="constant", align="center"),
-    Temp_C_mean_06_hours = runmean(Temp_C, k=6, alg="C", endrule="constant", align="center")
-    ) %>% 
-  select(-Temp_C)
-  #group_by(time) %>% 
-  #mutate(Temp_C_hourly_mean = mean(Temp_C)) %>% 
-  #ungroup()
-
-x_movingwindow_orig <- xts(select(d_movingwindow_orig, -time), order.by=d_movingwindow_orig$time) # View(x_movingwindow_orig)
-
-# output dygraph interactive plot
-# ideally would like to plot the means with fill but plot the mins and maxes just with line
-dygraph(x_movingwindow_orig, main="Temp_C") %>%
-  dySeries(
-    c("Temp_C_min_06_hours",
-      "Temp_C_mean_06_hours",
-      "Temp_C_max_06_hours"),
-    label = "Temp (ºC) over 6 hour moving window",
-    color = "orangered") %>% 
-  dyOptions(
-    #colors = c("orange", "orangered", "red"),
-    fillGraph = TRUE, fillAlpha = 0.4) %>% 
-  dyRangeSelector() 
-
-```
-
-## 3. Min/max over day
+#### 3. Min/max over day
 
 First find points of inflection to break up day. Possibly averaging around 3 points of max in case anomalous 
 
@@ -211,7 +167,7 @@ dygraph(x_dailyavg, main="Daily Temperature (ºC)") %>%
   dyRangeSelector() 
 ```
 
-## 4. Quantiles over day
+#### 4. Quantiles (& min/max) over day
 
 ```{r}
 d_dailyq <- d %>% 
@@ -254,83 +210,14 @@ dygraph(x_dailyq, main="Daily Temperature") %>%
 
 Daily average temperature (red line) with shading to indicate min/max (lightest orange) and quantiles 10% and 90% (darker orange).
 
-# 2021-02-24 POSSIBLE TO-DO's:
-
-- Finish merging these 4 sites that are reasonably close to a P2P site
-
-- Start exploring P2P Robolimpet data here:
-  - Ben's path of an example: `/Volumes/GoogleDrive/My Drive/projects/mbon-p2p/Robolimpets/Data/Argentina/Gregorio/data/0444 B300 C717 08-20190301 130640.csv`
-
-```{r}
-dir_p2p_robo <-
-  case_when(
-    user == "bbest"       ~ "/Volumes/GoogleDrive/My Drive/projects/mbon-p2p/Robolimpets",
-    # user == "cdobbelaere" ~ "/Users/cdobbelaere/Documents/robomussels/Robolimpets")
-    user == "cdobbelaere" ~ here::here("../Robolimpets"))
-  
-paths <- list.files(
-  dir_p2p_robo, ".*\\.csv$", 
-  recursive = T, full.names = T,
-  include.dirs = T) # 14 CSVs
-
-# find where metadata ends (from github help):
-find_skip <- function(file, pattern, n = 20) { 
-  min(grep(pattern, read_lines(file, n_max = n)))
-}
-
-# function to read temp csv files
-read_tempcsv <- function(path) {
-  tibble(
-    read_csv(
-      path,
-      skip = (find_skip(file = path, pattern = "^time,") - 1))) %>% 
-    drop_na()
-}
 
 
 
-# read metadata...not perfect yet
-read_metadata <- function(path) {
-  
-  # if metadata present:
-  if (find_skip(file = path, pattern = "^time,") != Inf) {
-    metadata <- tibble(
-      metadata = read_lines(
-        path, n_max = (find_skip(file = path, pattern = "^time,") - 1))) %>% 
-        # textclean::replace_non_ascii(replacement = "")) %>% 
-      mutate_if(is.character, function(x) {Encoding(x) <- "latin1"; return(x)}) %>%
-      filter(str_detect(metadata, ":")) %>% 
-      separate(metadata, c("key", "value"), ": ", convert = T) %>% 
-      pivot_wider(names_from = "key", values_from = "value")
-    if ("coords" %in% colnames(metadata)) {
-      metadata <- metadata %>%
-        separate(coords, c("lat", "lon"), ", ")
-    }
-    metadata <- metadata %>% mutate_all(list(~gsub(",", "", .)))
-    
-  # if no metadata present:
-  } else metadata <- read_csv(path)
-  if ("X1" %in% colnames(metadata)) {
-    metadata <- metadata %>% select(-X1)
-  }
-  return(metadata)
-}
+# MARINe: Reproducible Smoothing 
 
-# read all csv files and combine data & metadata
-d <- tibble(
-  path     = paths,
-  file     = basename(path),
-  data     = map(path, read_tempcsv),
-  metadata = map(path, read_metadata))
+### Read MARINe site data & associate with corresponding p2p site data
 
-# 7 has no metadata, just temp data
-# 13 has a weird character that needs to be removed
-```
-
-
-# Associate P2P sites with MARINe
-
-### Get [Pole to Pole](https://marinebon.org/p2p) sites & convert to sf
+#### Get [Pole to Pole](https://marinebon.org/p2p) sites & convert to sf
 
 ```{r}
 d_psites <- read_csv(here::here("data/p2p_sites.csv"))
@@ -341,12 +228,12 @@ d_psites_sf <- d_psites %>%
     crs    = 4326) # geographic coordinate ref system
 
 # map of all p2p sites
-leaflet(d_psites_sf) %>% 
-  addProviderTiles(providers$Esri.OceanBasemap) %>% 
-  addMarkers()
+# leaflet(d_psites_sf) %>% 
+#   addProviderTiles(providers$Esri.OceanBasemap) %>% 
+#   addMarkers()
 ```
 
-### Get MARINe sites, prep for combining temp data txts, & convert to sf
+#### Get MARINe sites, prep for combining temp data txts, & convert to sf
 
 ```{r}
 # from robo metadata
@@ -378,10 +265,11 @@ d_msites_sf <- d_msites %>%
     crs    = 4326) # geographic coordinate ref system (WGS1984)
 ```
 
-### Join MARINe and p2p sites by nearest feature
+#### Join MARINe and p2p sites by nearest feature
 
 ```{r}
-# join by nearest feature, 4 sites that are nearby
+# join 4 nearby sites by nearest feature
+# (sites that are both MARINe and p2p that we have data for)
 sites_joined <- st_join(
   d_msites_sf, 
   d_psites_sf %>% 
@@ -407,33 +295,11 @@ sites_joined <- sites_joined %>%
   st_as_sf( 
     coords = c("lon", "lat"), remove = F,
     crs    = 4326)
-
-max(sites_joined$dist_km) # 2.656662
-
-# plot to check - looks good
-leaflet(sites_joined) %>% 
-  addProviderTiles(providers$Esri.OceanBasemap) %>% 
-  addMarkers()
-
-# takes a long time to run!
-# get nearest points between msites and psites
-
-# near_m2p <- st_nearest_points(d_msites_sf, d_psites_sf) %>% 
-#   st_as_sf() %>% 
-#   mutate(
-#     dist_km = st_distance(x)) 
-
-# number of unique sites
-# sites_joined %>% 
-#   pull(msite) %>% 
-#   unique() %>% 
-#   length() # 65 loggers
+# sites_joined = df of all p2p sites that are also MARINe sites for which we have data
 ```
 
 
-# Combine & smooth temp data from sites_joined
-  
-### Functions for combining & smoothing temp data
+### Functions for combining & smoothing MARINe temp data
 
 ```{r}
 # dataCombiner updated to use for both p2p & MARINe
@@ -486,19 +352,691 @@ dailyQuantilesData <- function(data) {
     gather("metric", "Temp_C", c(-1, -2, -3)) %>% 
     select(-zone, zone)
 }
+```
+
+### Smooth MARINe sites
+
+#### split by each unique site & zone combination
+```{r warning=FALSE}
+d_filtered <- split(sites_joined, list(sites_joined$site, sites_joined$zone), drop = T, sep = "_")
+```
+
+#### smooth temp data corresponding to each site
+```{r warning=FALSE}
+# loop through all site & zone combinations and store dailyq for each in a list
+dailyq <- list()
+
+for (i in 1:length(d_filtered)){ # i = 1
+  
+  # combine data for all zones of each site
+  d_site_zone <- dataCombiner(data_site_zone = d_filtered[[i]])
+  
+  # get site and zone names
+  site <- unique(d_filtered[[i]][["site"]])
+  if ("zone" %in% colnames(d_filtered[[i]])) {
+    zone <- unique(d_filtered[[i]][["zone"]])
+    site_zone <-  paste0(site, "_", zone)
+  } else {
+    zone <- ""
+    site_zone <- site
+  }
+  
+  # smooth data
+  d_dailyq <- dailyQuantilesData(d_site_zone)
+
+  # assign global names to local objects
+  stringname <- paste0(site_zone, "_dailyq")
+  
+  # populate dailyq list
+  dailyq[[stringname]] <- d_dailyq
+  
+}
+
+# Create vector of ordered zones for when we convert zones to factor
+zones <- c("Low", "Lower-Mid", "Mid", "Upper-Mid", "High")
+
+# Bind temps for all sites & zones
+d <- dailyq %>% 
+  bind_rows %>% 
+  mutate(
+    site = as.factor(site),
+    zone = factor(zone, levels = zones, ordered = T))
+```
+
+#### write smoothed avg temp data for each site to a unique csv
+```{r warning=FALSE}
+# write csvs
+for (i in 1:length(levels(d$site))) { # for each site i
+
+  site <- levels(d$site)[i]
+
+  d_site <- d %>% 
+    filter(site == !!site) %>%
+    ungroup()
+  
+  # Filter out avgs
+  d_site_avg <- d_site %>% 
+    filter(metric == "temp_c_avg") %>% 
+    select(-site, -metric) %>% 
+    mutate(
+      zone = factor(zone, zones, ordered = T)) %>% 
+    arrange(zone, day) %>% 
+    pivot_wider(day, names_from = zone, values_from = Temp_C) %>% 
+    arrange(day) 
+  
+  write_csv(
+    d_site_avg,
+    paste0(getwd(), "/data_smoothed/", site, ".csv"))
+  
+}
 
 ```
 
-### split, smooth, & write csv's with temp data corresponding to sites in sites_joined (MARINe & p2p)
+
+### xts conversion
+
+```{r}
+smoothed_files <- tibble(
+  path = list.files(paste0(getwd(),"/data_smoothed/"), full.names = T),
+  file = basename(path),
+  site = file %>% path_ext_remove())
+
+# for each file name in list of files
+for (i in 1:length(smoothed_files$path)) {
+  # read in associated smoothed temp data
+  d_smoothed <- read_csv(smoothed_files$path[i]) %>% 
+    # select(-X1) %>% 
+    mutate(
+      day = parse_date_time(day, "y-m-d")) %>% 
+    mutate_at(vars(-1), funs(as.numeric))
+  # convert to xts
+  x_smoothed <- xts(select(d_smoothed, -day), order.by = d_smoothed$day)
+  assign(paste0("x_", smoothed_files$site[i]), x_smoothed)
+}
+```
+
+### dygraph plot for a MARINe site (avg only)
+```{r}
+smoothed_files <- smoothed_files %>% 
+  mutate(xts = paste0("x_", site))
+
+# Color palette for zones
+pal  <- c("#3D2C9A", "#3E98C5", "#4A9A78", "#F7BD33", "#D74B00")
+cols <- setNames(pal, zones) # color palette mapped to zone names
+
+dygraph(eval(parse(text = smoothed_files$xts[1])), main = "Daily Temperature") %>%
+  dyHighlight(
+    highlightCircleSize = 5, 
+    highlightSeriesBackgroundAlpha = 0.2,
+    hideOnMouseOut = TRUE) %>%
+    dyOptions(
+      colors = as.character(cols[names(x_avg)])) %>% 
+  dyOptions(
+    fillGraph = FALSE, fillAlpha = 0.4) %>%
+  dyRangeSelector() 
+
+# dygraph function
+dyPlot <- function(xts_name, colors) {
+  dygraph <- 
+    dygraph(eval(parse(text = xts_name)), main = "Daily Temperature") %>%
+      dyHighlight(
+        highlightCircleSize = 5, 
+        highlightSeriesBackgroundAlpha = 0.2,
+        hideOnMouseOut = TRUE) %>%
+        dyOptions(
+          # use only colors corresponding to zones that exist in the site's xts data
+          colors = as.character(
+            colors[names(eval(parse(text = xts_name)))])) %>% 
+      dyOptions(
+        fillGraph = FALSE, fillAlpha = 0.4) %>%
+      dyRangeSelector()
+  return(dygraph)
+}
+
+# example:
+# dyPlot(smoothed_files$xts[3], colors = cols)
+
+for (i in 1:length(smoothed_files$xts)) {
+  dygraph <- dyPlot(smoothed_files$xts[i], colors = cols)
+  assign(paste0("dy_", smoothed_files$site[i]), dygraph)
+}
+
+dy_USCABD
+dy_USCACA
+dy_USCAHS
+dy_USCAPD
+```
+
+
+# P2P (non-MARINe sites)
+
+### Read p2p site data (that don't have corresponding MARINe sites)
+
+#### prep directories
+```{r}
+dir_p2p_robo <-
+  case_when(
+    user == "bbest"       ~ "/Volumes/GoogleDrive/My Drive/projects/mbon-p2p/Robolimpets",
+    user == "cdobbelaere" ~ here::here("../Robolimpets"))
+  
+paths <- list.files(
+  dir_p2p_robo, ".*\\.csv$", 
+  recursive = T, full.names = T,
+  include.dirs = T) # 14 CSVs
+```
+
+#### functions to read in p2p temp data & metadata
+```{r warning=FALSE}
+# find where metadata ends
+find_skip <- function(file, pattern, n = 20) { 
+  min(grep(pattern, read_lines(file, n_max = n)))
+}
+
+# function to read temp csv files
+read_tempcsv <- function(path) {
+  data <- tibble(
+    read_csv(
+      path,
+      skip = (find_skip(file = path, pattern = "^time,") - 1))) %>% 
+    drop_na() 
+  if ("temp" %in% names(data)) {
+    data <- data %>% rename(Temp_C = temp)
+  }
+  if (TRUE %in% grepl("-", data$time)) {
+    data <- data %>% mutate(time = parse_date_time(time,"y-m-d H:M:S"))
+  } else if (TRUE %in% grepl("/", data$time)) {
+    data <- data %>% mutate(time = parse_date_time(time, "m/d/y H:M"))
+  }
+  data <- data %>% 
+    mutate(
+      site = 
+        if ("site" %in% colnames(data)) site 
+        else if ("sensor" %in% colnames(data)) sensor 
+        else NA,
+      zone = if ("zone" %in% colnames(data)) zone else NA)
+  if ("sensor" %in% colnames(data)) {data <- data %>% select(-sensor)}
+  return(data)
+}
+
+# read and clean metadata
+read_metadata <- function(path) { 
+  
+  # if metadata present:
+  if (find_skip(file = path, pattern = "^time,") != Inf) {
+    metadata <- tibble(
+      metadata = read_lines(
+        path,
+        n_max = (find_skip(file = path, pattern = "^time,") - 1))) %>% 
+      mutate_if(is.character, function(x) {
+        Encoding(x) <- "latin1"; return(x) 
+        }) %>% 
+      filter(str_detect(metadata, ":")) %>% 
+      separate(metadata, c("key", "value"), ": ", convert = T) %>% 
+      pivot_wider(names_from = "key", values_from = "value")
+    
+    if ("custom name" %in% colnames(metadata)) {
+      metadata <- metadata %>% select(-"custom name")
+    }
+
+    if ("coords" %in% colnames(metadata)) {
+      if (TRUE %in% grepl(",", metadata$coords)) {
+         metadata <- metadata %>%
+           separate(coords, c("lat", "lon"), ", ")
+      } else {
+        metadata <- metadata %>%
+          separate(coords, c("lat", "lon"), " ")
+      }
+    }
+
+    # fix coords
+    if (TRUE %in% grepl("S", metadata$lat)) {
+      metadata$lat <- gsub("S", "", metadata$lat)
+      metadata <- metadata %>%
+        mutate(lat = as.double(paste0("-", metadata$lat)))
+    } else if (TRUE %in% grepl("N", metadata$lat)) {
+      metadata$lat <- metadata$lat %>%
+        gsub("N", "", .) %>%
+        as.double()
+    }
+
+    if (TRUE %in% grepl("W", metadata$lon)) {
+      metadata$lon <- metadata$lon %>%
+        as.double(paste0("-", metadata$lon)) %>%
+        gsub("W", "", .)
+    } else if (TRUE %in% grepl("E", metadata$lon)) {
+      metadata$lon <- metadata$lon %>%
+        gsub("E", "", .) %>%
+        as.double()
+    }
+
+    metadata <- metadata %>%
+      mutate_all(list(~gsub(",", "", .)))
+  }
+
+  if ("X1" %in% colnames(metadata)) {
+    metadata <- metadata %>% select(-X1)
+  }
+
+  if (TRUE %in% grepl("ample", names(metadata))) {
+    metadata <- metadata %>%
+      rename(number_of_samples = grep("ample", names(metadata), value = T))
+  }
+
+  metadata <- metadata %>% mutate(across(!`serial number`, as.numeric))
+  return(metadata)
+}
+
+```
+
+
+
+```{r warning=FALSE}
+# read all csv files in 'robolimpets' folder and combine data
+d_p2p <- tibble(
+  path     = paths,
+  file     = basename(path),
+  data     = map(path, read_tempcsv)) 
+  # to filter out only temp data and not include metadata csvs
+  # filter(map_lgl(data, ~ncol(.) == 2))
+
+# datapoints 7, 10, 13 are irregular
+
+metadata <- map(d_p2p$path, read_metadata) %>% 
+  bind_rows 
+
+metadata <- tibble(metadata, path = d_p2p$path) %>% 
+  select(path, everything())
+
+d_p2p <- d_p2p %>% left_join(metadata, by = c("path" = "path"))
+
+library(readxl)
+p2p_meta <- readxl::read_excel(paste0(dir_p2p_robo, "/MBON_Pole-to-Pole_logger_list.xlsx"))
+
+p2p_meta$`Serial Number` <- p2p_meta$`Serial Number` %>% 
+  gsub("-", " ", . )
+
+list.files()
+
+
+
+
+
+hello <- left_join(d_p2p, p2p_meta, by = c("serial number" = "Serial Number"))
+
+
+
+# copied from before:
+
+# convert d_p2p to sf
+d_p2p_sf <- d_p2p %>% 
+  drop_na() %>% # for now..
+  st_as_sf(coords = c("lat", "lon"), remove = F) %>% 
+  st_set_crs(4326) # problem with coords...not correct
+View(d_p2p_sf)
+
+leaflet(d_p2p_sf) %>% addTiles() %>%   addMarkers()
+
+
+# join 4 nearby sites by nearest feature
+# (sites that are both MARINe and p2p that we have data for)
+p2p_sites_joined <- st_join(
+  d_msites_sf, 
+  d_psites_sf %>% 
+    select(-country) %>% 
+    rename(pgeometry = geometry), 
+  join = st_nearest_feature)
+
+# function to convert sf to st_point 
+# & add sf geometry list column & coord ref sys
+xy2pt <- function(x, y){
+  st_point(c(x, y)) %>% 
+    st_sfc(crs = 4326)
+}
+
+# add MARINe & p2p geom columns,
+# then use to calc distance between sites in km
+sites_joined <- sites_joined %>% 
+  st_drop_geometry() %>% 
+  mutate(
+    geom_marine = map2(longitude, latitude, xy2pt),
+    geom_p2p    = map2(lon      , lat     , xy2pt),
+    dist_km     = map2_dbl(geom_marine, geom_p2p, st_distance) / 1000) %>% 
+  st_as_sf( 
+    coords = c("lon", "lat"), remove = F,
+    crs    = 4326)
+```
+
+
+
+
+
+
+
+```{r warning=FALSE}
+# For each site i, write csv of smoothed temp data for all zones
+for (i in 1:length(d$site)) { # for each site i
+
+  # smooth data
+  # d_dailyq <- dailyQuantilesData(d_p2p[["data"]][[i]])
+
+  
+  
+  
+  # Filter out avgs only
+  d_site_avg <- d_site %>% 
+    filter(metric == "temp_c_avg") %>% 
+    select(-site, -metric) %>% 
+    # mutate(
+    #   zone = factor(zone, zones, ordered = T)) %>% 
+    arrange(zone, day) %>% 
+    pivot_wider(day, names_from = zone, values_from = Temp_C) %>% 
+    arrange(day) 
+  
+  write_csv(
+    d_dailyq,
+    paste0(getwd(), "/data_smoothed/", site, ".csv"))
+  
+}
+```
+
+
+```{r warning=FALSE}
+# For each site i, write csv of smoothed temp data for all zones
+for (i in 1:length(d_p2p$path)) { # for each site i
+
+  # smooth data
+  d_dailyq <- dailyQuantilesData(d_p2p[["data"]][[i]])
+  
+  # Filter out avgs only
+  d_site_avg <- d_site %>% 
+    filter(metric == "temp_c_avg") %>% 
+    select(-site, -metric) %>% 
+    # mutate(
+    #   zone = factor(zone, zones, ordered = T)) %>% 
+    arrange(zone, day) %>% 
+    pivot_wider(day, names_from = zone, values_from = Temp_C) %>% 
+    arrange(day) 
+  
+  write_csv(
+    d_dailyq,
+    paste0(getwd(), "/data_smoothed/", site, ".csv"))
+  
+}
+
+
+
+
+p_dailyq <- list()
+p_dailyq[1] <- dailyQuantilesData(d_p2p[["data"]][[1]])
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## NEW SMOOTHING FNS
+```{r}
+colnames(sites_joined)
+
+h <- bind_rows(sites_joined, d_p2p)
+View(h)
+
+
+
+d_filtered <- split(sites_joined, list(sites_joined$site, sites_joined$zone), drop = T, sep = "_")
+
+d_p2p_filtered <- split(d_p2p, d_p2p$file, drop = T, sep = "_")
+
+View(d_p2p_filtered)
+
+
+
+# trying to make a datacombiner that's reproducible across ALL sites 
+
+# dataCombiner updated to use for both p2p & MARINe
+# don't need to run for d_p2p since already combined
+dataCombiner <- function(data_site_zone) {
+  
+  # store site and zone names
+  # for MARINe:
+  if ("site" %in% colnames(data_site_zone)) {
+    site <- unique(data_site_zone$site) 
+  } 
+  if ("zone" %in% colnames(data_site_zone)) {
+    zone <- unique(data_site_zone$zone)
+  }
+  
+  # read temp file corresponding to each path name 
+  if (file_ext(data_site_zone$path) == "csv") {
+    temp_data <- bind_rows(lapply(data_site_zone$path, read_csv)) %>% 
+      rename(Temp_C = sst) %>% 
+      mutate(time   = parse_date_time(date, "y-m-d")) %>% 
+      select(-date)
+
+  } else {
+    temp_data <- bind_rows(lapply(data_site_zone$path, read_tsv)) %>% 
+      mutate(time = parse_date_time(Time_GMT, "m/d/y H:M")) %>%
+      select(-Time_GMT)
+  }
+  
+  temp_data <- temp_data %>% 
+    drop_na() %>% 
+    group_by(time) %>% 
+    summarize(Temp_C = mean(Temp_C)) %>% 
+    mutate(
+      site = if("site" %in% colnames(data_site_zone)) site else NA,
+      zone = if("zone" %in% colnames(data_site_zone)) zone else NA) %>% 
+    relocate(site)
+}
+  
+dailyQuantilesData <- function(data) {
+  
+  smoothed_data <- data %>% 
+    mutate(
+      day = lubridate::floor_date(time, unit = "day")) %>%
+    group_by(day) %>%
+    # distinct(day, .keep_all = T) %>% 
+    mutate(
+      temp_c_q10 = quantile(Temp_C, 0.1),
+      temp_c_q90 = quantile(Temp_C, 0.9),
+      temp_c_avg = mean(Temp_C),
+      temp_c_min = min(Temp_C),
+      temp_c_max = max(Temp_C)) %>% 
+    ungroup() %>% 
+    distinct(day, .keep_all = T) %>% 
+    select(-time, -Temp_C) %>% 
+    gather("metric", "Temp_C", c(-1, -2, -3))
+  # if ("zone" %in% colnames(smoothed_data)) {
+  #   select(-zone, zone)
+    # return(smoothed_data)
+  return(smoothed_data)
+  
+}
+
+dailyQuantilesData(d_p2p[["data"]][[9]])
+
+dailyQuantilesData()
+
+dailyQuantilesData(d_p2p[["data"]][[4]])
+
+
+data_1 <- d_p2p[["data"]][[9]] 
+# %>% 
+  # mutate(time = parse_date_time(time, "y-m-d H:M:S"))
+  #        
+
+smoothed_1 <- dailyQuantilesData(data_1)
+
+d_site_avg_1 <- smoothed_1 %>% 
+  pivot_wider(day, names_from = metric, values_from = Temp_C)
+
+
+x_smoothed_1 <- xts(select(d_site_avg_1, -day), order.by = d_site_avg_1$day)
+View(x_smoothed_1)
+
+dygraph(x_smoothed_1, main="Daily Temperature") %>%
+  dyAxis("y", label = " ") %>% 
+  dySeries(
+    c("temp_c_min",
+      "temp_c_avg",
+      "temp_c_max"),
+    label = "avg ºC",
+    color = "orangered") %>% 
+  dyOptions(
+    fillGraph = FALSE, fillAlpha = 0.4) %>%
+  dyRangeSelector() 
+
+# for (i in 1:length(levels(d$site))) { # for each site i
+
+  # site <- levels(d$site)[i]
+
+  # d_site <- smoothed_1 %>% 
+  #   filter(site == !!site) %>%
+  #   ungroup()
+  
+  # Filter out avgs
+  d_site_avg_1 <- smoothed_1 %>% 
+    filter(metric == "temp_c_avg") %>% 
+    select(-site, -metric) %>% 
+    mutate(
+      zone = factor(zone, zones, ordered = T)) %>% 
+    arrange(zone, day) %>% 
+    pivot_wider(day, names_from = zone, values_from = Temp_C) %>% 
+    arrange(day) 
+  
+  d_site_avg_1 <- smoothed_1 %>% 
+    pivot_wider(day, names_from = metric, values_from = Temp_C)
+  xts_1 <- 
+  
+  
+  
+  
+  
+  write_csv(
+    d_site_avg,
+    paste0(getwd(), "/data_smoothed/", site, ".csv"))
+  
+}
+
+
+View(d_site_avg_1)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+View(smoothed_1)
+
+
+
+View(d_p2p_filtered[["data"]][[1]])
+
+dailyQuantilesData(d_p2p_filtered[[1]])
+```
+
+
+### Smooth MARINe 
+
+
+
+
+### Smooth p2p (only 1 zone per site)
 
 ```{r}
 # split by each unique site & zone combination
 # d_filtered <- split(d_sites, list(d_sites$site, d_sites$zone), drop = T, sep = "_")
-d_filtered <- split(sites_joined, list(sites_joined$site, sites_joined$zone), drop = T, sep = "_")
+# d_filtered <- split(sites_joined, list(sites_joined$site, sites_joined$zone), drop = T, sep = "_")
+
+# loop through all site & zone combinations and store dailyq for each in a list
+dailyq_p2p <- list()
+
+
+
+# don't forget to exclude metadata (last logger)
+# & look at folder names to access real site names (instead of just serial nums)
+
+
+for (i in 1:(nrow(d_p2p) - 1){ # i = 1
+  
+
+  # d_site_zone <- dataCombiner(data_site_zone = d_p2p[[i]])
+  
+  
+  
+  # get site and zone names
+  site <- path_ext_remove(d_p2p$file)
+  site_zone <- site
+  
+  # site <- unique(d_filtered[[i]][["site"]])
+  
+  
+  # if ("zone" %in% colnames(d_filtered[[i]])) {
+  #   zone <- unique(d_filtered[[i]][["zone"]])
+  #   site_zone <-  paste0(site, "_", zone)
+  # } else {
+  #   zone <- ""
+  #   site_zone <- site
+  # }
+  
+  # smooth data
+  d_dailyq <- dailyQuantilesData(d_p2p$data)
+  
+  
+  
+  
+  
+  
+  # x_dailyq <- dailyQuantiles_xts(d_site_zone)
+  
+  # assign global names to local objects
+  stringname <- paste0(site_zone, "_dailyq")
+  
+  dailyq[[stringname]] <- d_dailyq
+  
+  # will write csv later once bound by site
+  # write_csv(
+  #   d_dailyq,
+  #   path = paste0(getwd(), "/data_smoothed/", stringname, ".csv"))
+ 
+}
+
+
+
+
 
 
 # loop through all site & zone combinations and store dailyq for each in a list
-dailyq <- list()
+dailyq_p2p <- list()
 
 for (i in 1:length(d_filtered)){ # i = 1
   
@@ -531,1131 +1069,11 @@ for (i in 1:length(d_filtered)){ # i = 1
  
 }
 
-# Bind temps for all sites & zones
-d <- bind_rows(dailyq) %>% 
-  mutate(
-    site = as.factor(site),
-    zone = as.factor(zone))
-
-# Create vector of ordered zones for when we convert zones to factor
-zones <- c("Low", "Lower-Mid", "Mid", "Upper-Mid", "High")
-
-
-# For each site i, write csv of smoothed temp data for all zones
-for (i in 1:length(levels(d$site))) { # for each site i
-
-  site <- levels(d$site)[i]
-
-  d_site <- d %>% 
-    filter(site == !!site) %>%
-    ungroup()
-  
-  # Filter out avgs
-  d_site_avg <- d_site %>% 
-    filter(metric == "temp_c_avg") %>% 
-    select(-site, -metric) %>% 
-    mutate(
-      zone = factor(zone, zones, ordered = T)) %>% 
-    arrange(zone, day) %>% 
-    pivot_wider(day, names_from = zone, values_from = Temp_C) %>% 
-    arrange(day) 
-  
-  write_csv(
-    d_site_avg,
-    paste0(getwd(), "/data_smoothed/", site, ".csv"))
-  
-}
-
-
-
-# next steps: 
-# turn loop into a function 
-
-```
-
-# Convert all csv files to xts for dygraphs plotting (need to fix)
-
-```{r}
-smoothed_files <- tibble(
-  path = list.files(here::here("data_smoothed"), full.names = T),
-  file = basename(path),
-  site = file %>% path_ext_remove())
-
-# for each file name in list of files
-for (i in 1:length(smoothed_files$path)) {
-  # read in associated smoothed temp data
-  d_smoothed <- read_csv(smoothed_files$path[i]) %>% 
-    # select(-X1) %>% 
-    mutate(
-      day = parse_date_time(day, "y-m-d")) %>% 
-    mutate_at(vars(-1), funs(as.numeric))
-  # convert to xts
-  x_smoothed <- xts(select(d_smoothed, -day), order.by = d_smoothed$day)
-  assign(paste0("x_", smoothed_files$site[i]), x_smoothed)
-}
-
-```
-
-# Plotting
-
-```{r}
-# Color palette for zones
-pal  <- c("#3D2C9A", "#3E98C5", "#4A9A78", "#F7BD33", "#D74B00")
-cols <- setNames(pal, zones)
-
-dygraph(eval(parse(text = paste0("x_", smoothed_files$site[2]))), main = "Daily Temperature") %>%
-  dyHighlight(
-    highlightCircleSize = 5, 
-    highlightSeriesBackgroundAlpha = 0.2,
-    hideOnMouseOut = TRUE) %>%
-    dyOptions(
-      colors = as.character(cols[names(x_avg)])) %>% 
-  dyOptions(
-    fillGraph = FALSE, fillAlpha = 0.4) %>%
-  dyRangeSelector() 
-
-# dygraph function
-dyPlot <- function(x_data, cols) {
-  dygraph <- dygraph(eval(parse(text = x_data)), main = "Daily Temperature") %>%
-    dyHighlight(
-      highlightCircleSize = 5, 
-      highlightSeriesBackgroundAlpha = 0.2,
-      hideOnMouseOut = TRUE) %>%
-      dyOptions(
-        colors = as.character(cols[names(x_data)])) %>% 
-    dyOptions(
-      fillGraph = FALSE, fillAlpha = 0.4) %>%
-    dyRangeSelector()
-  return(dygraph)
-}
-
-
-for (i in 1:length(smoothed_files$site)) {
-  x_data <- paste0("x_", smoothed_files$site[i])
-  dygraph <- dyPlot(x_data = x_data, cols = cols)
-}
-dygraph
-
-
-
-
-
-
-
-
-# test
-d_test <- read_csv(here::here("data_smoothed/USCABD.csv")) %>% 
-  select(-X1)
-
-x_avg <- xts(select(d_test, -day), order.by = d_test$day) 
-View(x_avg)
-
-
-```
-
-
-# Mapping: sorting zones and locations
-
-## Combine metadata for each site
-
-```{r}
-# read metadata
-robo_reference <- read_csv("ben_best_roboreference20201030.csv") 
-robo_metadata  <- read_csv("Robomussel metadata.csv") %>% 
-  rename(
-    microsite_id   = `microsite id`,
-    logger_type    = `logger type`,
-    tidal_height_m = `tidal height (m)`,
-    wave_exposure  = `wave exposure`,
-    start_date     = `start date`,
-    end_date       = `end date`
-    )
-
-robo_files <- list.files(path = dir_gdata, pattern = "*.txt", full.names = TRUE)
-
-loggerID <- rep(NA, length.out = length(robo_files))
-
-# keep only logger name from each file's name
-for (i in 1:length(robo_files)){
-  loggerID[i] <- sub("\\_.*", "", basename(file_path_sans_ext(robo_files[i])))
-  }
-
-# copy all info from robo_metadata into dataframe
-robo_list <- tibble(loggerID) 
-robo_list <- 
-  semi_join(
-    x = robo_metadata, y = robo_list,
-    by = c("microsite_id" = "loggerID")) %>% 
-  left_join(
-    y = robo_reference,
-    by = c("site" = "robo_location"),
-    keep = FALSE ) %>%
-  group_by(site) %>% 
-  mutate(loggers_per_site = n()) %>% 
-  ungroup() %>% 
-  # remove duplicate columns
-  # (latitude = robo_latitude, longitude = robo_longitude, location = marine_site_name)
-  select(
-    -latitude, -longitude, -marine_site_name) 
-
-```
-
-
-# EXTRAS
-## Location (map of all locations & zones)
-
-### Label styles and color palettes
-
-```{r}
-label_style_normal <- list(
-  "color"        =  "black",
-  "font-family"  =  "default",
-  "box-shadow"   =  "3px 3px rgba(0,0,0,0.25)",
-  "font-size"    =  "11px",
-  "border-color" =  "rgba(0,0,0,0.5)"
-  )
-  
-label_style_bold <- list(
-  "color"        =  "black",
-  "font-family"  =  "default",
-  "font-weight"  =  "bold",
-  "box-shadow"   =  "3px 3px rgba(0,0,0,0.25)",
-  "font-size"    =  "15px",
-  "border-color" =  "rgba(0,0,0,0.5)"
-  )
-
-label_style_sites <-list(
-  "color"        =  "white",
-  "font-style"   =  "italic",
-  "font-family"  =  "default",
-  "font-size"    =  "12px"
-  )
-
-# Discrete color palette by site
-pal_sites <- colorFactor(
-  palette = "Dark2",
-  domain = robo_list$location
-  )
-
-pal_zones <- colorFactor(
-  palette = "YlOrBr",
-  domain = robo_list$zone
-  )
-```
-
-### Map of all sites
-
-```{r}
-# good but problem: only plotting one logger per site if multiple loggers with 
-# same robo_longtitude and robo_latitude 
-# solution: Marker Clusters
-
-# would be cool to find spatial data (polygons) for each site to make outline using that instead of with rectangles
-# also would like to map temp data and color markers according to zone (requires custom marker PNGs)
-
-sites_map <- leaflet(data = robo_list) %>% 
-  addProviderTiles(
-    providers$Esri.WorldImagery,
-    providerTileOptions(detectRetina = T)
-    ) %>% 
-  addMarkers(
-    lat = ~robo_latitude,
-    lng = ~robo_longitude,
-    group = "Loggers", 
-    label = ~microsite_id,
-    clusterOptions = markerClusterOptions(),
-    labelOptions = labelOptions(
-      direction = "bottom",
-      offset = c(2,2), sticky = T,
-      style = label_style_normal
-      ),
-    popup = paste0(
-      "Logger: ", robo_list$microsite_id, "<br>",
-      "Zone: ", robo_list$zone, "<br>",
-      robo_list$location, ", ", robo_list$region, "<br>",
-      "(", robo_list$robo_latitude, "ºN, ",
-      robo_list$robo_longitude, " ºW)", sep = "", "<br>"
-      ),
-    popupOptions = popupOptions(
-      maxWidth = 300, minWidth = 50, maxHeight = NULL,
-      autoPan = T, keepInView = F, closeButton = T
-      )
-    ) %>%
-  addLabelOnlyMarkers(
-    lat = ~marine_latitude, lng = ~marine_longitude,
-    label = ~location,
-    group = "Sites",
-    labelOptions = labelOptions(
-      direction = "left",
-      offset = c(-30,10), sticky = T,
-      noHide = T, textOnly = T,
-      style = label_style_sites
-      )
-    ) %>% 
-  addRectangles(
-    lat1 = (~marine_latitude - .5), lat2 = (~marine_latitude + .5),
-    lng1 = (~marine_longitude - .5), lng2 = (~marine_longitude + .5),
-    label = ~location,
-    fillColor = "transparent",
-    group = "Sites",
-    fillOpacity = 0.5, color = ~pal_sites(location),
-    labelOptions = labelOptions(
-      direction = "left",
-      offset = c(-30,10), sticky = T,
-      noHide = F, 
-      style = label_style_bold
-      )
-    ) %>% 
-  setView(
-    lat = mean(robo_list$robo_latitude),
-    lng = mean(robo_list$robo_longitude), 
-    zoom = 7) %>%
-  addEasyButton(
-    easyButton(
-      icon="fa-globe",
-      title="Zoom out to level 1",
-      onClick=JS("function(btn, map){ map.setZoom(1); }")
-      )
-    ) %>% 
-  addLegend(
-    position = "bottomright", opacity = 0.8,
-    pal = pal_sites, values = ~location,
-    group = "Sites",
-    title = "Site"
-    ) %>% 
-  addMiniMap(
-    position = "topright",
-    tiles = providers$Esri.WorldImagery,
-    toggleDisplay = T, 
-    height = 70, width = 70
-    ) %>% 
-  addLayersControl(
-    overlayGroups = c("Loggers", "Sites"),
-    options = layersControlOptions(collapsed = FALSE)
-    )
-
-sites_map  
-
-```
-
-### Map of individual logger
-
-(Ideally want to work on customizing marker colors according to zone)
-
-```{r}
-# filter out data for each individual logger
-for (i in 1:nrow(robo_list)) {
-  robo_list_i <- robo_list[i,]
-  assign(paste0("robo_list_", i), robo_list_i)
-}
-
-# one individual logger map (logger 11)
-indiv_logger_map <- leaflet(data = robo_list_11) %>% 
-  addProviderTiles(
-    providers$Esri.WorldImagery,
-    providerTileOptions(detectRetina = T)
-    ) %>% 
-  addMarkers(
-    lat = ~robo_latitude,
-    lng = ~robo_longitude,
-    group = "Loggers", 
-    label = ~microsite_id,
-    labelOptions = labelOptions(
-      direction = "bottom",
-      offset = c(2,2), sticky = T,
-      style = label_style_normal
-      ),
-    popup = paste0(
-      "Logger: ", robo_list_11$microsite_id, "<br>",
-      "Zone: ", robo_list_11$zone, "<br>",
-      robo_list_11$location, ", ", robo_list_11$region, "<br>",
-      "(", robo_list_11$robo_latitude, "ºN, ",
-      robo_list_11$robo_longitude, " ºW)", sep = "", "<br>"
-      ),
-    popupOptions = popupOptions(
-      maxWidth = 300, minWidth = 50, maxHeight = NULL,
-      autoPan = T, keepInView = F, closeButton = T
-      )
-    ) %>%
-  addLabelOnlyMarkers(
-    lat = ~marine_latitude, lng = ~marine_longitude,
-    label = ~location,
-    group = "Sites",
-    labelOptions = labelOptions(
-      direction = "left",
-      offset = c(-30,10), sticky = T,
-      noHide = T, textOnly = T,
-      style = label_style_sites
-      )
-    ) %>% 
-  addRectangles(
-    lat1 = (~marine_latitude - .5), lat2 = (~marine_latitude + .5),
-    lng1 = (~marine_longitude - .5), lng2 = (~marine_longitude + .5),
-    label = ~location,
-    fillColor = "transparent",
-    group = "Sites",
-    fillOpacity = 0.5, color = ~pal_sites(location),
-    labelOptions = labelOptions(
-      direction = "left",
-      offset = c(-30,10), sticky = T,
-      noHide = F, 
-      style = label_style_bold
-      )
-    ) %>% 
-  setView(
-    lat = mean(robo_list_11$robo_latitude),
-    lng = mean(robo_list_11$robo_longitude), 
-    zoom = 7) %>%
-  addEasyButton(
-    easyButton(
-      icon="fa-globe",
-      title="Zoom out to level 1",
-      onClick=JS("function(btn, map){ map.setZoom(1); }")
-      )
-    ) %>% 
-  addLegend(
-    position = "bottomright", opacity = 0.8,
-    pal = pal_sites, values = ~location,
-    group = "Sites",
-    title = "Site"
-    ) %>% 
-  addMiniMap(
-    position = "topright",
-    tiles = providers$Esri.WorldImagery,
-    toggleDisplay = T, 
-    height = 70, width = 70
-    ) %>% 
-  addLayersControl(
-    overlayGroups = c("Loggers", "Sites"),
-    options = layersControlOptions(collapsed = FALSE)
-    )
-
-indiv_logger_map
-
-
-```
-
-### Map for every individual logger (alternative to previous chunk)
-
-```{r}
-
-for (i in 1:nrow(robo_list)) {
-  
-  robo_list_i <- robo_list[i,]
-  
-  indiv_logger_map_i <- leaflet(data = robo_list_i) %>% 
-    addProviderTiles(
-      providers$Esri.WorldImagery,
-      providerTileOptions(detectRetina = T)
-      ) %>% 
-    addMarkers(
-      lat = ~robo_latitude,
-      lng = ~robo_longitude,
-      group = "Loggers", 
-      label = ~microsite_id,
-      labelOptions = labelOptions(
-        direction = "bottom",
-        offset = c(2,2), sticky = T,
-        style = label_style_normal
-        ),
-      popup = paste0(
-        "Logger: ", robo_list_i$microsite_id, "<br>",
-        "Zone: ", robo_list_i$zone, "<br>",
-        robo_list_i$location, ", ", robo_list_i$region, "<br>",
-        "(", robo_list_i$robo_latitude, "ºN, ",
-        robo_list_i$robo_longitude, " ºW)", sep = "", "<br>"
-        ),
-      popupOptions = popupOptions(
-        maxWidth = 300, minWidth = 50, maxHeight = NULL,
-        autoPan = T, keepInView = F, closeButton = T
-        )
-      ) %>%
-    addLabelOnlyMarkers(
-      lat = ~marine_latitude, lng = ~marine_longitude,
-      label = ~location,
-      group = "Sites",
-      labelOptions = labelOptions(
-        direction = "left",
-        offset = c(-30,10), sticky = T,
-        noHide = T, textOnly = T,
-        style = label_style_sites
-        )
-      ) %>% 
-    addRectangles(
-      lat1 = (~marine_latitude - .5), lat2 = (~marine_latitude + .5),
-      lng1 = (~marine_longitude - .5), lng2 = (~marine_longitude + .5),
-      label = ~location,
-      fillColor = "transparent",
-      group = "Sites",
-      fillOpacity = 0.5, color = ~pal_sites(location),
-      labelOptions = labelOptions(
-        direction = "left",
-        offset = c(-30,10), sticky = T,
-        noHide = F, 
-        style = label_style_bold
-        )
-      ) %>% 
-    setView(
-      lat = mean(robo_list_i$robo_latitude),
-      lng = mean(robo_list_i$robo_longitude), 
-      zoom = 7) %>%
-    addEasyButton(
-      easyButton(
-        icon="fa-globe",
-        title="Zoom out to level 1",
-        onClick=JS("function(btn, map){ map.setZoom(1); }")
-        )
-      ) %>% 
-    addLegend(
-      position = "bottomright", opacity = 0.8,
-      pal = pal_sites, values = ~location,
-      group = "Sites",
-      title = "Site"
-      ) %>% 
-    addMiniMap(
-      position = "topright",
-      tiles = providers$Esri.WorldImagery,
-      toggleDisplay = T, 
-      height = 70, width = 70
-      ) %>% 
-    addLayersControl(
-      overlayGroups = c("Loggers", "Sites"),
-      options = layersControlOptions(collapsed = FALSE)
-    )
-  
-  assign(paste0("indiv_logger_map_", i), indiv_logger_map_i)
-  
-}
-
-# example
-indiv_logger_map_30
-
 ```
 
 
 
 
-
-
-
-
-
-
-# p2p: prep & split by site
-
-```{r}
-# set dir_pdata; will need to adjust for where data is on Ben's computer
-# also not sure if this is the correct p2p in situ temp data - was having trouble finding it
-
-dir_pdata <- case_when(
-  # user == "bbest"       ~ "/Volumes/GoogleDrive/My Drive/projects/mbon-p2p/data/rocky/MARINe/robomusseldata20201030",
-  user == "cdobbelaere" ~ "/Users/cdobbelaere/Documents/robomussels/intertidal-temps/p2p/data/sst")
-
-d_pfiles  <- tibble(
-  path              = list.files(dir_pdata, ".*\\.csv", full.names = T),
-  file              = basename(path),
-  metric_microsite  = file %>% path_ext_remove()) %>% 
-  separate(metric_microsite, c("metric", "site"), "_", convert = T)
-
-# View(d_psites)
-d_psites <- d_pfiles %>% 
-  left_join(
-    d_psites, by = c("site" = "id")) %>% 
-  drop_na()
-
-# these p2p sites don't seem to have any data on zone..?
-# not in situ data (SST satellite data)
-
-# split p2p files by site (no zone listed)
-d_pfiltered <- split(d_psites, list(d_psites$site), drop = T, sep = "_")
-```
-
-
-## p2p: smooth & write csv
-
-```{r}
-p_dailyq  <- list()
-
-for (i in 1:length(d_pfiltered)){ # i = 1
-  
-  # combine data for all zones of each site
-  d_site_zone <- dataCombiner(data_site_zone = d_pfiltered[[i]])
-  
-  # get site and zone names
-  site <- unique(d_pfiltered[[i]][["site"]])
-  if ("zone" %in% colnames(d_pfiltered[[i]])) {
-    zone <- unique(d_pfiltered[[i]][["zone"]])
-    site_zone <-  paste0(site, "_", zone)
-  } else {
-    zone <- ""
-    site_zone <- site
-  }
-  
-  # smooth data
-  d_dailyq <- dailyQuantilesData(d_site_zone)
-  x_dailyq <- dailyQuantiles_xts(d_site_zone)
-  
-  # assign global names to local objects
-  stringname <- paste0(site_zone, "_dailyq")
-  
-  p_dailyq[[stringname]] <- d_dailyq
-  
-  # adjust path for ben
-  write_csv(
-    d_dailyq,
-    path = paste0(getwd(), "/data_smoothed/", site_zone, ".csv"))
- 
-}
-
-
-
-# Then bind temps for all zones of each site (but not necessary for p2p
-# because they don't seem to be associated with zone)
-
-```
-
-
-
-
-# From last time / extras
-
-```{r}
-
-# Convert d_site_avg to xts
-x_avg <- xts(select(d_site_avg, -day), order.by = d_site_avg$day) 
-
-
-
-# Run this, for instance, for d_pfiltered[[1]]
-# For each zone & site combination....
-# dataCombiner <- function(data_site_zone) {
-#   
-#   # store site and zone names
-#   site <- unique(data_site_zone[["site"]])
-#   zone <- unique(data_site_zone[["zone"]])
-#   
-#   # read temp file corresponding to each path name 
-#   bind_rows(lapply(data_site_zone$path, read_tsv)) %>%
-#     mutate(
-#       time = parse_date_time(Time_GMT, "m/d/y H:M")) %>%
-#     select(-Time_GMT) %>%
-#     drop_na() %>% 
-#     group_by(time) %>% 
-#     # calculate average temp for each time point 
-#     # across all loggers within the zone & site file
-#     summarize(Temp_C = mean(Temp_C)) %>% 
-#     mutate(
-#       site = site,
-#       zone = zone) %>% 
-#     relocate(site)
-# }
-
-# we only really want daily quantiles data (no xts conversion, yet)
-# dailyQuantilesData <- function(data) {
-#   data %>% 
-#     mutate(
-#       day = floor_date(time, unit = "day")) %>%
-#     group_by(day) %>%
-#     distinct(day, .keep_all = T) %>% 
-#     mutate(
-#       temp_c_q10 = quantile(Temp_C, 0.1),
-#       temp_c_q90 = quantile(Temp_C, 0.9),
-#       temp_c_avg = mean(Temp_C),
-#       temp_c_min = min(Temp_C),
-#       temp_c_max = max(Temp_C)) %>% 
-#     select(-time, -Temp_C) %>% 
-#     gather("metric", "Temp_C", c(-1, -2, -3)) %>% 
-#     select(-zone, zone)
-# }
-
-dailyQuantiles_xts <- function(data) {
-  data_dailyq <- data %>% 
-    mutate(
-      day = floor_date(time, unit = "day")) %>%
-    group_by(day) %>%
-    distinct(day, .keep_all = T) %>% 
-    mutate(
-      temp_c_q10 = quantile(Temp_C, 0.1),
-      temp_c_q90 = quantile(Temp_C, 0.9),
-      temp_c_avg = mean(Temp_C),
-      temp_c_min = min(Temp_C),
-      temp_c_max = max(Temp_C)) %>% 
-    select(-time, -Temp_C) %>% 
-    gather("metric", "Temp_C", c(-1, -2, -3)) %>% 
-    select(-zone, zone)
-  x_dailyq <- xts(
-    select(data_dailyq, -day),
-    order.by = data_dailyq$day) 
-  return(x_dailyq)
-}
-```
-
-
-#### Good version: Bind temps for all zones for each site
-
-```{r}
-site <- d$site[1]
-
-# Filter out first temp data corresponding to site we previously identified
-d_site <- d %>% 
-  filter(site == !!site) %>%
-  ungroup()
-
-# Examine number of observations for each metric (same #)
-table(d_site$metric)
-
-# Filter out avgs
-d_site_avg <- d_site %>% 
-  filter(metric == "temp_c_avg") %>% 
-  select(-site, -metric) %>% 
-  mutate(
-    zone = factor(zone, zones, ordered = T)) %>% 
-  arrange(zone, day) %>% 
-  pivot_wider(day, names_from = zone, values_from = Temp_C) %>% 
-  arrange(day) 
-  
-# Convert d_site_avg to xts
-x_avg <- xts(select(d_site_avg, -day), order.by = d_site_avg$day) 
-# FF8A00
-# Color palette for zones
-# pal  <- rev(RColorBrewer::brewer.pal(5, "Spectral"))
-pal  <- c("#3D2C9A", "#3E98C5", "#4A9A78", "#F7BD33", "#D74B00")
-cols <- setNames(pal, zones)
-```
-
-### Plot 
-
-```{r}
-# Dygraph plot for x_avg
-dygraph(x_avg, main="Daily Temperature") %>%
-  dyHighlight(
-    highlightCircleSize = 5, 
-    highlightSeriesBackgroundAlpha = 0.2,
-    hideOnMouseOut = TRUE) %>%
-    dyOptions(
-      colors = as.character(cols[names(x_avg)])) %>% 
-  dyOptions(
-    fillGraph = FALSE, fillAlpha = 0.4) %>%
-  dyRangeSelector() #%>% 
-  # Black background to make the yellow pop more
-  # dyShading(from = "1980-01-01", to = "2030-01-01", color = "black")
-
-
-
-
-
-# For all quantiles data for a given site:
-  
-d_site_q <-  d_site %>% 
-  # filter(metric == "temp_c_avg") %>% 
-  select(-site) %>% 
-  mutate(
-    zone = factor(zone, zones, ordered = T)) %>% 
-  arrange(zone, day) %>% 
-  pivot_wider(c(day, metric), names_from = zone, values_from = Temp_C) %>% 
-  arrange(day) 
-
-x_q <- xts(select(d_site_q, -day), order.by = d_site_q$day) 
-
-  
-dygraph(x_q, main="Daily Temperature") %>%
-  dyHighlight(
-    highlightCircleSize = 5, 
-    highlightSeriesBackgroundAlpha = 0.2,
-    hideOnMouseOut = TRUE) %>%
-    dyOptions(
-      colors = as.character(cols[names(x_avg)])) %>% 
-  dyOptions(
-    fillGraph = FALSE, fillAlpha = 0.4) %>%
-  dyRangeSelector() %>% 
-  dySeries(
-    c("temp_c_q10",
-      "temp_c_avg",
-      "temp_c_q90"),
-    label = "",
-    color="red"
-  )
-
-
-
-```
-
-
-```{r}
-dygraph(x_avg, main="Daily Temperature") %>%
-  dyHighlight(
-    highlightCircleSize = 5, 
-    highlightSeriesBackgroundAlpha = 0.2,
-    hideOnMouseOut = FALSE) %>%
-    dyOptions(
-      colors = as.character(cols[names(x_avg)])) %>% 
-  dySeries(
-    c("temp_c_min",
-      "temp_c_avg",
-      "temp_c_max"),
-    label = " ",
-    color = "orangered") %>% 
-  dyAxis("y", label = " ") %>% 
-  dySeries(
-    c("temp_c_q10",
-      "temp_c_avg",
-      "temp_c_q90"),
-    label = "avg ºC",
-    color = "orangered") %>% 
-  dyOptions(
-    fillGraph = FALSE, fillAlpha = 0.4) %>%
-  dyRangeSelector() 
-
-```
-
-
-```{r functions for smoothing}
-# Now that we have all temp data combined and avg'd we need to run smoothing code for every df
-
-# hourly avgs
-hourlyAvg_data <- function(data) {
-  data_hourlyavg <- data %>% 
-    mutate(time = floor_date(time, unit = "hour")) %>% 
-    group_by(time) %>% 
-    summarize(Temp_C_hourly_mean = mean(Temp_C)) 
-  return(data_hourlyavg)
-}
-
-hourlyAvg <- function(data) {
-  data_hourlyavg <- data %>% 
-    mutate(time = floor_date(time, unit = "hour")) %>% 
-    group_by(time) %>% 
-    summarize(Temp_C_hourly_mean = mean(Temp_C)) 
-  x_hourlyavg <- xts(
-    select(data_hourlyavg, -time),
-    order.by = data_hourlyavg$time)
-  return(x_hourlyavg)
-}
-
-
-# 6 hour moving window (min, mean, max) using previous hourly averages 
-movingWindow <- function(data_hourlyavg) {
-  data_movingwindow <- data_hourlyavg %>% 
-    mutate(
-      Temp_C_min_06_hours  =  runmin(Temp_C_hourly_mean, k=6, alg="C",
-                                     endrule="constant", align="center"),
-      Temp_C_mean_06_hours = runmean(Temp_C_hourly_mean, k=6, alg="C",
-                                     endrule="constant", align="center"),
-      Temp_C_max_06_hours  =  runmax(Temp_C_hourly_mean,  k=6, alg="C",
-                                     endrule="constant", align="center")) %>% 
-  select(-Temp_C_hourly_mean)
-  x_movingwindow <- xts(
-    select(data_movingwindow, -time),
-    order.by = data_movingwindow$time) 
-  return(x_movingwindow)
-}
-
-
-# daily avgs
-dailyAvg <- function(data) {
-  data_dailyavg <- data %>% 
-    mutate(day = floor_date, unit = "day") %>%
-    group_by(day) %>%
-    summarize(
-      temp_c_avg = mean(Temp_C),
-      temp_c_min = min(Temp_C),
-      temp_c_max = max(Temp_C))
-  x_dailyavg <- xts(
-    select(data_dailyavg, -day),
-    order.by = data_dailyavg$day)
-  return(x_dailyavg)
-}
-  
-
-
-# daily quantiles
-dailyQuantiles <- function(data) {
-  data_dailyq <- data %>% 
-    mutate(
-      day = floor_date(time, unit = "day")) %>%
-    group_by(day) %>%
-    mutate(
-      temp_c_q10 = quantile(Temp_C, 0.1),
-      temp_c_q90 = quantile(Temp_C, 0.9),
-      temp_c_avg = mean(Temp_C),
-      temp_c_min = min(Temp_C),
-      temp_c_max = max(Temp_C)) %>% 
-    distinct(day, .keep_all = TRUE) %>% 
-    select(-time, -Temp_C) %>% 
-    gather("metric", "Temp_C", c(-1, -2, -3)) %>% 
-    select(-zone, zone)
-  
-  x_dailyq <- xts(
-    select(data_dailyq, -day),
-    order.by = data_dailyq$day) 
-
-  return(x_dailyq)
-}
-
-
-
-
-
-```
-
-
-```{r older loop for smoothing, no list}
-
-for (i in 1:length(d_filtered)){
-  
-  # combine data for all zones of each site
-  d_site_zone <- dataCombiner(data_site_zone = d_filtered[[i]])
-  
-  # get site and zone names
-  site <- unique(d_filtered[[i]][["site"]])
-  zone <- unique(d_filtered[[i]][["zone"]])
-  site_zone <- paste0(site, "_", zone)
-  
-  # smooth data
-  d_dailyq <- dailyQuantilesData(d_site_zone)
-  x_dailyq <- dailyQuantiles(d_site_zone)
-  
-  # assign global names to local objects
-  assign(paste0("d_dailyq_",       site_zone ), d_dailyq      )
-  #assign(paste0("x_dailyq_",       site_zone ), x_dailyq      )
-}
-```
-
-
-
-```{r working loop!}
-
-for (i in 1:length(d_filtered)){
-  
-  # combine data for all zones of each site
-  d_site_zone <- dataCombiner(data_site_zone = d_filtered[[i]])
-  
-  # get site and zone names
-  site <- unique(d_filtered[[i]][["site"]])
-  zone <- unique(d_filtered[[i]][["zone"]])
-  site_zone <- paste0(site, "_", zone)
-  
-  # smooth data
-  d_hourlyavg <- hourlyAvg_data(d_site_zone) # only for purpose of moving window
-  x_hourlyavg <- hourlyAvg(d_site_zone)
-  x_movingwindow <- movingWindow(d_hourlyavg)
-  x_dailyavg <- dailyAvg(d_site_zone)
-  x_dailyq <- dailyQuantiles(d_site_zone)
-  
-  # assign global names to local objects
-  assign(paste0("d_", site_zone), d_site_zone)
-  assign(paste0("x_hourlyavg_",    site_zone ), x_hourlyavg   )
-  assign(paste0("x_movingwindow_", site_zone ), x_movingwindow)
-  assign(paste0("x_dailyavg_",     site_zone ), x_dailyavg    )
-  assign(paste0("x_dailyq_",       site_zone ), x_dailyq      )
-
-}
-
-
-
-
-
-
-
-
-
-
-```
-
-
-```{r}
-# for (i in 1:length(d_filtered)){
-#   
-#   # combine data for all zones of each site
-#   d_site_zone <- dataCombiner(data_site_zone = d_filtered[[i]])
-#   
-#   # get site and zone names
-#   sitename <- unique(d_filtered[[i]][["site"]])
-#   zonename <- unique(d_filtered[[i]][["zone"]])
-#   
-#   # smooth data
-#   d_hourlyavg <- hourlyAvg_data(d_site_zone)
-#   x_movingwindow <- movingWindow(d_hourlyavg)
-#   x_dailyavg <- dailyAvg(d_site_zone)
-#   x_dailyq <- dailyAvg(d_site_zone)
-#   
-#   # store unsmoothed and smoothed data
-#   assign(
-#     paste0(
-#       "d_", unique(d_filtered[[i]][["site"]]),
-#       "_", unique(d_filtered[[i]][["zone"]])),
-#     d_site_zone)
-#   
-#   assign()
-  
-  
-  
-  
-
-
-# plot outputs
-dygraph(x_USCABD_Mid_dailyavg, main="Daily Temperature (ºC)") %>%
-  dySeries(
-    c("temp_c_min",
-      "temp_c_avg",
-      "temp_c_max"),
-    label = "Daily Temperature (ºC)",
-    color = "orangered") %>% 
-  dyOptions(
-    fillGraph = FALSE, fillAlpha = 0.4) %>%
-  dyRangeSelector() 
-
-
-
-
-
-
-
-```
-
-
-```{r}
-# all_sites_zones <- list()
-# 
-# sitezone_smoothed <- list()
-# 
-# for (i in 1:length(d_filtered)){
-#   
-#   # combine data for all zones owaf each site
-#   d_site_zone <- dataCombiner(data_site_zone = d_filtered[[i]])
-#   
-#   # get site and zone names
-#   site <- unique(d_filtered[[i]][["site"]])
-#   zone <- unique(d_filtered[[i]][["zone"]])
-#   site_zone <- paste0(site, "_", zone)
-#   
-#   # smooth data
-#   d_hourlyavg <- hourlyAvg_data(d_site_zone) # only for purpose of moving window
-#   x_hourlyavg <- hourlyAvg(d_site_zone)
-#   x_movingwindow <- movingWindow(d_hourlyavg)
-#   x_dailyavg <- dailyAvg(d_site_zone)
-#   x_dailyq <- dailyAvg(d_site_zone)
-#   
-#   # assign global names to local objects
-#   sitezone_smoothed <- setNames(
-#     as.list(c(x_hourlyavg, x_movingwindow, x_dailyage, x_dailyq)),
-#     nm = c(
-#       paste0("x_", site_zone, "_", "hourlyavg"   ),
-#       paste0("x_", site_zone, "_", "movingwindow"),
-#       paste0("x_", site_zone, "_", "dailyavg"    ),
-#       paste0("x_", site_zone, "_", "dailyq"      )
-#       )
-#     )
-#   
-# }
-# # Loop to combine all temp data for each zone of each site 
-# for (i in 1:length(d_filtered)){
-#   d_site_zone <- dataCombiner(data_site_zone = d_filtered[[i]])
-#   # where d_filtered[[i]] is a different combination of site and zone
-#   # i.e. accessing all the temp data for each site and zone combination
-#   # and combining the corresponding txt files
-#   assign(
-#     paste0(
-#       "d_", unique(d_filtered[[i]][["site"]]),
-#       "_", unique(d_filtered[[i]][["zone"]])
-#       ),
-#     d_site_zone
-#     )
-#   }
-# 
-# 
-# 
-# 
-# 
-# 
-# d_USCABD_Mid <- bind_rows(lapply(d_sites_USCABD_Mid$path, read_tsv)) %>%
-#   mutate(
-#     time = parse_date_time(Time_GMT, "m/d/y H:M")) %>%
-#   select(-Time_GMT) %>%
-#   drop_na() %>% 
-#   group_by(time) %>% 
-#   summarize(Temp_C = mean(Temp_C)) # avg temp for each time slot across all loggers
-# 
-# 
-# # read in data for first site
-# for (i in 1:nrow(d_sites)) { # for every logger
-#   for (j in 1:length(unique(d_sites$site))) {
-#     for (k in 1: length(unique(d_sites$zone))) {
-#       
-#       # Loop through each site and zone combination
-#       site_j_zone_k <- d_sites %>% 
-#         filter(
-#           site == as.character(d_sites$site[j]),
-#           zone == as.character(d_sites$zone[k])
-#           )
-#       assign(paste0("site_", site[j], "zone_", zone[k]), site_j_zone_k)
-#     }
-#   }
-#       
-#       # Read in associated data for those sites and zones
-#       d_sites_i <- read_tsv(as.character(d_sites$path[i])) %>% 
-#         mutate(
-#           time = parse_date_time(Time_GMT, "m/d/y H:M")) %>% 
-#         select(-Time_GMT) %>% 
-#         arrange(time) 
-#     }
-#   }
-#   
-#   
-#   
-#   for (zone in 1:length(distinct(d_sites$zone)) { # for every unique zone
-#     site_i_zone_j <- d_sites %>%
-#       filter(
-#         site == as.character(site[i]),
-#         zone == as.character(zone[j]))
-#   }
-# 
-# 
-# d_sites_1 <- read_tsv(as.character(d_sites$path[1])) %>% 
-#   mutate(
-#     time = parse_date_time(Time_GMT, "m/d/y H:M")) %>% 
-#   select(-Time_GMT) %>% 
-#   arrange(time) 
-# 
-# 
-# 
-# 
-# # 6 hour moving average, using hourly averages from earlier
-# d_movingwindow <- d_hourlymean %>% 
-#   mutate(
-#     # min for 6 hr moving window, based on hourly mean
-#     Temp_C_min_06_hours  = runmin(Temp_C_hourly_mean,  k=6, alg="C", endrule="constant", align="center"),
-#     # mean for 6 hr moving window, based on hourly mean
-#     Temp_C_mean_06_hours = runmean(Temp_C_hourly_mean, k=6, alg="C", endrule="constant", align="center"),
-#     # max for 6 hr moving window, based on hourly mean
-#     Temp_C_max_06_hours  = runmax(Temp_C_hourly_mean,  k=6, alg="C", endrule="constant", align="center")
-#     ) %>% 
-#   select(-Temp_C_hourly_mean)
-# 
-# d_dailyavg <- d %>% 
-#   mutate(
-#     day = floor_date(time, unit = "day")) %>%
-#   group_by(day) %>%
-#   summarize(
-#     temp_c_avg = mean(Temp_C),
-#     temp_c_min = min(Temp_C),
-#     temp_c_max = max(Temp_C))
-# 
-# d_dailyq <- d %>% 
-#   mutate(
-#     day = floor_date(time, unit = "day")) %>%
-#   group_by(day) %>%
-#   summarize(
-#     temp_c_q10 = quantile(Temp_C, 0.1),
-#     temp_c_q90 = quantile(Temp_C, 0.9),
-#     temp_c_avg = mean(Temp_C),
-#     temp_c_min = min(Temp_C),
-#     temp_c_max = max(Temp_C))
-
-  
-```
-
-### Sort out temp files according to site, starting with the initial data
 
 
 
