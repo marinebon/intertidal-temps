@@ -9,8 +9,18 @@ librarian::shelf(
   #spatial
   sf, leaflet,
   # tidyverse
-  fs, glue, here, lubridate, stringr, tidyverse, purrr)
+  fs, glue, here, lubridate, stringr, tidyverse, purrr, yaml)
 
+# paths & variables ----
+user <- Sys.info()[["user"]]
+
+# set dir_gdata as filepath for robomussels data on Google Drive 
+dir_gdata <- case_when(
+  #user == "bbest"       ~ "/Users/bbest/Downloads/robomusseldata20201030",
+  user == "bbest"       ~ "/Volumes/GoogleDrive/My Drive/projects/mbon-p2p/data/rocky/MARINe/robomusseldata20201030",
+  user == "cdobbelaere" ~ "/Users/cdobbelaere/Documents/robomussels/robomusseldata20201030")
+dir_avg <- file.path(dirname(dir_gdata), "robomusseldata20201030_avg")
+stopifnot(any(dir.exists(c(dir_gdata, dir_avg))))
 
 
 # define functions ----
@@ -56,7 +66,6 @@ dataCombiner <- function(data_site_zone) {
     relocate(site)
 }
 
-
 dailyQuantilesData <- function(data) {
   data %>% 
     mutate(
@@ -88,7 +97,7 @@ get_dygraph <- function(xts) {
   
   # map color palette to zone names
   pal  <- c("#3D2C9A", "#3E98C5", "#4A9A78", "#F7BD33", "#D74B00")
-  zone_colors <- setNames(pal, zones) 
+  zone_colors <- setNames(pal, names(xts)) 
   
   # plot
   dygraph <- dygraph(xts, main = "Daily Temperature") %>%
@@ -105,187 +114,7 @@ get_dygraph <- function(xts) {
     dyOptions(
       fillGraph = FALSE, fillAlpha = 0.4) %>%
     dyRangeSelector()
+  
   return(dygraph)
 }
   
-  
-# paths & variables ----
-user <- Sys.info()[["user"]]
-
-# set dir_gdata as filepath for robomussels data on Google Drive 
-dir_gdata <- case_when(
-  #user == "bbest"       ~ "/Users/bbest/Downloads/robomusseldata20201030",
-  user == "bbest"       ~ "/Volumes/GoogleDrive/My Drive/projects/mbon-p2p/data/rocky/MARINe/robomusseldata20201030",
-  user == "cdobbelaere" ~ "/Users/cdobbelaere/Documents/robomussels/robomusseldata20201030")
-dir_avg <- file.path(dirname(dir_gdata), "robomusseldata20201030_avg")
-stopifnot(any(dir.exists(c(dir_gdata, dir_avg))))
-
-
-
-# sites ----
-
-## read in site data ----
-
-# get [Pole to Pole](https://marinebon.org/p2p) sites & convert to sf 
-d_psites <- read_csv(here::here("data/p2p_sites.csv"))
-
-d_psites_sf <- d_psites %>% 
-  st_as_sf(
-    coords = c("lon", "lat"), remove = F,
-    crs    = 4326) # geographic coordinate ref system
-
-
-# get MARINe sites, prep for combining temp data txts, & convert to sf
-# from robo metadata
-d_msites <- read_csv("Robomussel metadata.csv") %>% 
-  rename(
-    microsite_id   = `microsite id`,
-    logger_type    = `logger type`,
-    tidal_height_m = `tidal height (m)`,
-    wave_exposure  = `wave exposure`,
-    start_date     = `start date`,
-    end_date       = `end date`)
-
-d_mfiles  <- tibble(
-  path            = list.files(dir_gdata, ".*\\.txt", full.names = T),
-  file            = basename(path),
-  microsite_year  = file %>% path_ext_remove()) %>% 
-  separate(microsite_year, c("msite", "year"), "_", convert = T)
-
-# join file names with their associated metadata
-d_msites <- d_mfiles %>% 
-  left_join(
-    d_msites, by = c("msite" = "microsite_id")) %>% 
-  drop_na() # sum(is.na(d_msites$site)): n = 2
-
-# convert to sf for joining with p2p
-d_msites_sf <- d_msites %>% 
-  st_as_sf(
-    coords = c("longitude", "latitude"), remove = F,
-    crs    = 4326) # geographic coordinate ref system (WGS1984)
- 
-
-## join MARINe and p2p sites by nearest feature ----
-
-# join 4 nearby sites by nearest feature
-# (sites that are both MARINe and p2p that we have data for)
-sites_joined <- st_join(
-  d_msites_sf, 
-  d_psites_sf %>% 
-    select(-country) %>% 
-    rename(pgeometry = geometry), 
-  join = st_nearest_feature)
-
-# add MARINe & p2p geom columns,
-# then use to calc distance between sites in km
-sites_joined <- sites_joined %>% 
-  st_drop_geometry() %>% 
-  mutate(
-    geom_marine = map2(longitude, latitude, xy2pt),
-    geom_p2p    = map2(lon      , lat     , xy2pt),
-    dist_km     = map2_dbl(geom_marine, geom_p2p, st_distance) / 1000) %>% 
-  st_as_sf( 
-    coords = c("lon", "lat"), remove = F,
-    crs    = 4326)
-
-
-
-## smooth MARINe sites ----
-
-# split by each unique site & zone combination
-
-d_filtered <- split(sites_joined, list(sites_joined$site, sites_joined$zone), drop = T, sep = "_")
-
-# loop through all site & zone combinations and smooth 
-# store dailyq for each in a list
-dailyq <- list()
-
-for (i in 1:length(d_filtered)){ # i = 
-  
-  # combine data for all zones of each site
-  d_site_zone <- dataCombiner(data_site_zone = d_filtered[[i]])
-  
-  # get site and zone names
-  site <- unique(d_filtered[[i]][["site"]])
-  if ("zone" %in% colnames(d_filtered[[i]])) {
-    zone <- unique(d_filtered[[i]][["zone"]])
-    site_zone <-  paste0(site, "_", zone)
-  } else {
-    zone <- ""
-    site_zone <- site
-  }
-  
-  # smooth data
-  d_dailyq <- dailyQuantilesData(d_site_zone)
-  
-  # assign global names to local objects
-  stringname <- paste0(site_zone, "_dailyq")
-  
-  # populate dailyq list
-  dailyq[[stringname]] <- d_dailyq
-  
-}
-
-# create vector of ordered zones for when we convert zones to factor
-zones <- c("Low", "Lower-Mid", "Mid", "Upper-Mid", "High")
-
-# bind temps for all sites & zones
-d <- dailyq %>% 
-  bind_rows %>% 
-  mutate(
-    site = as.factor(site),
-    zone = factor(zone, levels = zones, ordered = T))
- 
-
-# write smoothed avg temp data for each site to a unique csv
-for (i in 1:length(levels(d$site))) { # for each site i
-  
-  site <- levels(d$site)[i]
-  
-  d_site <- d %>% 
-    filter(site == !!site) %>%
-    ungroup()
-  
-  # Filter out avgs
-  d_site_avg <- d_site %>% 
-    filter(metric == "temp_c_avg") %>% 
-    select(-site, -metric) %>% 
-    mutate(
-      zone = factor(zone, zones, ordered = T)) %>% 
-    arrange(zone, day) %>% 
-    pivot_wider(day, names_from = zone, values_from = Temp_C) %>% 
-    arrange(day) 
-  
-  write_csv(
-    d_site_avg,
-    paste0(getwd(), "/data_smoothed/", site, ".csv"))
-  
-}
-
-
-
-## organize report output ----
-# get start & end dates and other metadata
-sites_joined_summarized <- sites_joined %>% 
-  mutate(num_sites = length(unique(site))) %>% 
-  group_by(site) %>% 
-  mutate(num_loggers = length(unique(msite))) %>% 
-  # mutate(
-  #   start_date = min(start_date),
-  #   end_date   = max(end_date)) %>% 
-  # group_by(site, location) %>% 
-  distinct(site, .keep_all = T) %>% 
-  select(site, location, region, country, num_loggers, num_sites) %>% 
-  rename(site_id = site, site_name = location)
-
-sites_smoothed <- 
-  tibble(
-    path        = list.files(glue("{getwd()}/data_smoothed"), full.names = T),
-    file        = basename(path),
-    site_id     = file %>% path_ext_remove()) %>% 
-    # ,xts        = glue("x_{site_id}"),) 
-  left_join(
-    sites_joined_summarized,
-    by = c("site_id" = "site_id"), copy = F, keep = F) %>% 
-  select(site_id, site_name, everything())
-
