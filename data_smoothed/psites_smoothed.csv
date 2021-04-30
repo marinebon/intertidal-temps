@@ -1,5 +1,5 @@
-id,name,path,file,country,org,number_of_samples,num_loggers,lat_site,lon_site,geometry
-arg-puertomadryn3,[Punta Loma](http://www.northeastern.edu/helmuthlab/Research/gigapan/argentina.html#_ga=2.176170668.804414391.1602182240-113605171.1602182239),/Users/cdobbelaere/Documents/robomussels/intertidal-temps/data_smoothed/arg-puertomadryn3.csv,arg-puertomadryn3.csv,arg,[IBIOMAR/CONICET](https://www.larbim.com.ar/),14851,2,-42.8112,-64.9017,"c(-64.892802, -42.812146)"
-bra-arraialdocabo-fortaleza,Arraial do Cabo - Fortaleza,/Users/cdobbelaere/Documents/robomussels/intertidal-temps/data_smoothed/bra-arraialdocabo-fortaleza.csv,bra-arraialdocabo-fortaleza.csv,bra,[LECAR - UFF](http://www.lecar.uff.br/index.html),1153,2,-22.9687,-42.015,"c(-42.013307, -22.970343)"
-bra-costadasalgas-gramute,Costa das Algas - Gramute,/Users/cdobbelaere/Documents/robomussels/intertidal-temps/data_smoothed/bra-costadasalgas-gramute.csv,bra-costadasalgas-gramute.csv,bra,[Bentos - UFES](http://bentos.ufes.br/),1366,2,-19.9663,-40.134,"c(-40.137143, -19.97276)"
-usa-fknms,[South Florida Program](https://www.aoml.noaa.gov/iea/),/Users/cdobbelaere/Documents/robomussels/intertidal-temps/data_smoothed/usa-fknms.csv,usa-fknms.csv,usa,[S. Florida MBON](https://marinebon.org/pages/sfmbon/),672,2,24.5,-81,"c(-82.738745, 27.683174)"
+id,name,file,country,org,number_of_samples,num_loggers,lat_site,lon_site
+arg-puertomadryn3,[Punta Loma](http://www.northeastern.edu/helmuthlab/Research/gigapan/argentina.html#_ga=2.176170668.804414391.1602182240-113605171.1602182239),arg-puertomadryn3.csv,arg,[IBIOMAR/CONICET](https://www.larbim.com.ar/),14851,2,-42.8112,-64.9017
+bra-arraialdocabo-fortaleza,Arraial do Cabo - Fortaleza,bra-arraialdocabo-fortaleza.csv,bra,[LECAR - UFF](http://www.lecar.uff.br/index.html),1153,2,-22.9687,-42.015
+bra-costadasalgas-gramute,Costa das Algas - Gramute,bra-costadasalgas-gramute.csv,bra,[Bentos - UFES](http://bentos.ufes.br/),1366,2,-19.9663,-40.134
+usa-fknms,[South Florida Program](https://www.aoml.noaa.gov/iea/),usa-fknms.csv,usa,[S. Florida MBON](https://marinebon.org/pages/sfmbon/),672,2,24.5,-81

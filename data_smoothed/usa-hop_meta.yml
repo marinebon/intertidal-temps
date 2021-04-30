@@ -1,14 +1,11 @@
-|
-  - id: usa-hop
-    name: Hopkins
-    path: /Users/cdobbelaere/Documents/robomussels/intertidal-temps/data_smoothed/usa-hop.csv
-    file: usa-hop.csv
-    site: USCAHS
-    location: Hopkins
-    region: California
-    country: USA
-    org: '[MARINe](https://marine.ucsc.edu/sitepages/hopkins.html)'
-    num_loggers: 24.0
-    lat: 36.6212006
-    lon: -121.9073
-    geometry: c(-121.9073, 36.62120056)
+id: usa-hop
+name: Hopkins
+file: usa-hop.csv
+site: USCAHS
+location: Hopkins
+region: California
+country: USA
+org: '[MARINe](https://marine.ucsc.edu/sitepages/hopkins.html)'
+num_loggers: 24.0
+lat: 36.6212006
+lon: -121.9073

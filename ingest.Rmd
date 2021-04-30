@@ -316,6 +316,7 @@ msites_smoothed <-
     sites_joined_summarized,
     by = c("site_id" = "id"), copy = F, keep = F) %>% 
   select(site_id, name, everything()) %>% 
+  select(-geometry, -path) %>% 
   rename(id = site_id)
 
 write_csv(msites_smoothed, glue("{getwd()}/data_smoothed/msites_smoothed.csv"))
@@ -325,13 +326,11 @@ m_info <- read_csv(here::here("data_smoothed/msites_smoothed.csv"))
 
 # write yaml metadata files
 for (i in 1:nrow(m_info)) {
-  m_meta <- m_info %>% 
-    filter(id == m_info$id[i]) 
-  yaml_m_meta <- as.yaml(list(m_meta))
-  write_yaml(
-    yaml_m_meta,
-    glue("{getwd()}/data_smoothed/{m_info$id[i]}_meta.yml"),
-    fileEncoding = "UTF-8")
+  m_info %>% 
+    filter(id == m_info$id[i]) %>% 
+    write_yaml(
+      here(glue("data_smoothed/{m_info$id[i]}_meta.yml")),
+      fileEncoding = "UTF-8")
 }
 ```
 
@@ -350,21 +349,22 @@ psites_smoothed <-
     file = basename(path),
     id = file %>% path_ext_remove()) %>% 
   right_join(psites_summarized, by = c("id" = "id"), copy = F, keep = F) %>% 
-  select(id, name, everything())
+  select(id, name, everything()) %>% 
+  select(-geometry, -path)
 
-write_csv(psites_smoothed, glue("{getwd()}/data_smoothed/psites_smoothed.csv"))
+write_csv(psites_smoothed, here(glue("data_smoothed/psites_smoothed.csv")))
 
 # read metadata back in
 p2p_info <- read_csv(here::here("data_smoothed/psites_smoothed.csv"))
 
 # write yaml metadata files
-for (i in 1:nrow(p2p_info)) {
-  p2p_meta <- p2p_info %>% 
-    filter(id == p2p_info$id[i]) 
-  yaml_p2p_meta <- as.yaml(list(p2p_meta))
-  write_yaml(
-    yaml_p2p_meta,
-    glue("{getwd()}/data_smoothed/{p2p_info$id[i]}_meta.yml"),
-    fileEncoding = "UTF-8")
+for (id in p2p_info$id) {  # id = p2p_info$id[1]
+  message(glue("id: {id}"))
+  p2p_info %>% 
+    filter(id == !!id) %>% 
+    write_yaml(
+      here(glue("data_smoothed/{id}_meta.yml")),
+      fileEncoding = "UTF-8")
 }
+
 ```
