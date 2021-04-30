@@ -1,16 +1,12 @@
 ---
 title: "MARINe sites: in situ temps report"
-output:
-  html_document:
-    toc: true
-    toc_float: true
-    code_folding: hide
+output: html_document
 editor_options: 
   chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = T, message = F, warning = F)
+knitr::opts_chunk$set(echo = F, message = F, warning = F)
 ```
 
 ```{r}
@@ -20,25 +16,27 @@ source(here::here("functions.R"))
 ### In situ temperature
 
 ```{r}
-# will filter sites_smoothed by site of interest, e.g. site_id == params$site_id
-# ex: if params site_id is USCADB, would filter as follows
-site_id <- "USCABD"
-site_info <- sites_smoothed %>%
-  filter(site_id == !!site_id)
-csv_in_situ <- site_info$path
-xts <- get_xts(csv_in_situ)
+site_id <- "usa-bml"
 
-# get relevant zone names and start/end dates
-xts_zones <- c(names(xts))
-start <- start(xts)
-end   <- end(xts)
+# TODO: write metadata in ingest.Rmd
+# meta$provider = "MARINe network"
+# meta$contributers = c("Joe", "Jane")
+# meta$num_loggers = 6
+# write_yaml(meta, meta_yml)
+
+temp_csv <- here(glue("data_smoothed/{site_id}.csv"))
+meta_yml <- here(glue("data_smoothed/{site_id}_meta.yml"))
+site_url <- glue("https://raw.githubusercontent.com/marinebon/p2p/master/data/insitu_temp/{basename(temp_csv)}")
+
+meta <- read_yaml(meta_yml)
+d    <- read_csv(temp_csv)
+x    <- xts(select(d, -day), order.by = d$day)
 
 # output timeseries plot
-get_dygraph(xts)
+get_dygraph(x)
 ```
 
-This timeseries was created using data collected by `r site_info$num_loggers` biomimetic temperature loggers between `r start` and `r end`. Loggers were placed in the `r tolower(knitr::combine_words(xts_zones))` zones of the intertidal ecosystem.
+This timeseries was created using data collected by `r meta$num_loggers` biomimetic temperature loggers between `r min(d$day)` and `r max(d$day)`. Loggers were placed in the `r tolower(knitr::combine_words(names(x)))` zones of the intertidal ecosystem.
 
-Total number of sites: `r site_info$num_sites`
+Download data: [`r basename(site_url)`](`r site_url`) 
 
-Download data: [`r basename(csv_in_situ)`](link goes here) 

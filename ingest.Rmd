@@ -18,159 +18,178 @@ knitr::opts_chunk$set(echo = T, message = F, warning = F)
 1. PROBLEM. Data is too big for simple interactive time-series plot (ie dygraphs) if on same Rmd output html page. The folder of *.csv's [robomusseldata20201030 - Google Drive](https://drive.google.com/drive/u/3/folders/1kzjZ72vFxRGsafTgCCzq6cXIhQ1GYQa3) contains 317 files totalling 236 MB. SOLUTION(s):
     1. Read into SQLite database and show as Shiny app.
 
-  
 
-# Load packages & user info
-
+# load functions
 ```{r}
 source(here::here("functions.R"))
 ```
 
-### MARIne report output
+# MARINe sites
 
-### p2p gdata report output
+### read in site data
 
-### Read p2p gdata
-
-#### prep directories
 ```{r}
+# get [Pole to Pole](https://marinebon.org/p2p) sites & convert to sf 
+d_psites <- read_csv(here::here("data/p2p_sites.csv"))
+
+d_psites_sf <- d_psites %>% 
+  st_as_sf(
+    coords = c("lon", "lat"), remove = F,
+    crs    = 4326) # geographic coordinate ref system
+
+# get MARINe sites, prep for combining temp data txts, & convert to sf
+# from robo metadata
+d_msites <- read_csv("Robomussel metadata.csv") %>% 
+  rename(
+    microsite_id   = `microsite id`,
+    logger_type    = `logger type`,
+    tidal_height_m = `tidal height (m)`,
+    wave_exposure  = `wave exposure`,
+    start_date     = `start date`,
+    end_date       = `end date`)
+
+d_mfiles <- tibble(
+  path            = list.files(dir_gdata, ".*\\.txt", full.names = T),
+  file            = basename(path),
+  microsite_year  = file %>% path_ext_remove()) %>% 
+  separate(microsite_year, c("msite", "year"), "_", convert = T)
+
+# join file names with their associated metadata
+d_msites <- d_mfiles %>% 
+  left_join(
+    d_msites, by = c("msite" = "microsite_id")) %>% 
+  drop_na() # sum(is.na(d_msites$site)): n = 2
+
+# convert to sf for joining with p2p
+d_msites_sf <- d_msites %>% 
+  st_as_sf(
+    coords = c("longitude", "latitude"), remove = F,
+    crs    = 4326) # geographic coordinate ref system (WGS1984)
+```
+
+### join MARINe and p2p sites by nearest feature
+```{r}
+# join 4 nearby sites by nearest feature
+# (sites that are both MARINe and p2p that we have data for)
+sites_joined <- st_join(
+  d_msites_sf, 
+  d_psites_sf %>% 
+    select(-country) %>% 
+    rename(pgeometry = geometry), 
+  join = st_nearest_feature)
+
+# add MARINe & p2p geom columns,
+# then use to calc distance between sites in km
+sites_joined <- sites_joined %>% 
+  st_drop_geometry() %>% 
+  mutate(
+    geom_marine = map2(longitude, latitude, xy2pt),
+    geom_p2p    = map2(lon      , lat     , xy2pt),
+    dist_km     = map2_dbl(geom_marine, geom_p2p, st_distance) / 1000) %>% 
+  st_as_sf( 
+    coords = c("lon", "lat"), remove = F,
+    crs    = 4326)
+```
+
+### smooth MARINe sites 
+```{r warning=FALSE}
+
+d_filtered <- split(sites_joined, list(sites_joined$id, sites_joined$zone), drop = T, sep = "_")
+
+# loop through all site & zone combinations and smooth 
+# store dailyq for each in a list
+dailyq <- list()
+
+for (i in 1:length(d_filtered)){ # i = 1
+  
+  # combine data for all zones of each site
+  d_site_zone <- dataCombiner(data_site_zone = d_filtered[[i]])
+  
+  # get site and zone names
+  site <- unique(d_filtered[[i]][["id"]])
+  if ("zone" %in% colnames(d_filtered[[i]])) {
+    zone <- unique(d_filtered[[i]][["zone"]])
+    site_zone <-  paste0(site, "_", zone)
+  } else {
+    zone <- ""
+    site_zone <- site
+  }
+  
+  # smooth data
+  d_dailyq <- dailyQuantilesData(d_site_zone)
+  
+  # assign global names to local objects
+  stringname <- paste0(site_zone, "_dailyq")
+  
+  # populate dailyq list
+  dailyq[[stringname]] <- d_dailyq
+  
+}
+
+# create vector of ordered zones for when we convert zones to factor
+zones <- c("Low", "Lower-Mid", "Mid", "Upper-Mid", "High")
+
+# bind temps for all sites & zones
+d <- dailyq %>% 
+  bind_rows %>% 
+  mutate(
+    site = as.factor(site),
+    zone = factor(zone, levels = zones, ordered = T))
+ 
+
+# write smoothed avg temp data for each site to a unique csv
+for (i in 1:length(levels(d$site))) { # for each site i
+  
+  site <- levels(d$site)[i]
+  
+  d_site <- d %>% 
+    filter(site == !!site) %>%
+    ungroup()
+  
+  # Filter out avgs
+  d_site_avg <- d_site %>% 
+    filter(metric == "temp_c_avg") %>% 
+    select(-site, -metric) %>% 
+    mutate(
+      zone = factor(zone, zones, ordered = T)) %>% 
+    arrange(zone, day) %>% 
+    pivot_wider(day, names_from = zone, values_from = Temp_C) %>% 
+    arrange(day) 
+  
+  write_csv(
+    d_site_avg,
+    glue("{getwd()}/data_smoothed/{site}.csv"))
+  
+}
+
+```
+
+# p2p sites
+
+### read p2p gdata
+```{r}
+#### prep directories
 dir_p2p_robo <-
   case_when(
     user == "bbest"       ~ "/Volumes/GoogleDrive/My Drive/projects/mbon-p2p/Robolimpets",
     user == "cdobbelaere" ~ here::here("../Robolimpets"))
-  
+
 paths <- list.files(
   dir_p2p_robo, ".*\\.csv$", 
   recursive = T, full.names = T,
   include.dirs = T) # 14 CSVs
 ```
 
-#### functions to read in gdata temp data & metadata
+### actually read in data and metadata
 ```{r warning=FALSE}
-# find where metadata ends
-find_skip <- function(file, pattern, n = 20) { 
-  min(grep(pattern, read_lines(file, n_max = n)))
-}
-
-# function to read temp csv files
-read_tempcsv <- function(path) {
-  data <- tibble(
-    read_csv(
-      path,
-      skip = (find_skip(file = path, pattern = "^time,") - 1))) %>% 
-    drop_na() 
-  if ("temp" %in% names(data)) {
-    data <- data %>% rename(Temp_C = temp)
-  }
-  if (TRUE %in% grepl("-", data$time)) {
-    data <- data %>% mutate(time = parse_date_time(time,"y-m-d H:M:S"))
-  } else if (TRUE %in% grepl("/", data$time)) {
-    data <- data %>% mutate(time = parse_date_time(time, "m/d/y H:M"))
-  }
-  data <- data %>% 
-    mutate(
-      site = 
-        if ("site" %in% colnames(data)) site 
-        else if ("sensor" %in% colnames(data)) sensor 
-        else NA,
-      zone = if ("zone" %in% colnames(data)) zone else NA)
-  if ("sensor" %in% colnames(data)) {data <- data %>% select(-sensor)}
-  return(data)
-}
-```
-
-
-```{r warning=FALSE}
-# read and clean metadata
-read_metadata <- function(path) { 
-  
-  n_start <- find_skip(file = path, pattern = "^time,")
-  
-  # if metadata present:
-  if (n_start != Inf) {
-    
-    metadata <- tibble(
-      raw_data = read_lines(
-        path,
-        n_max = n_start - 1)) 
-
-    metadata <- metadata %>% 
-      mutate_if(
-        is.character, 
-        function(x) {Encoding(x) <- "latin1"; return(x)}) %>% 
-      filter(str_detect(raw_data, ":")) %>% 
-      separate(raw_data, c("key", "value"), ": ", convert = T) %>% 
-      pivot_wider(names_from = "key", values_from = "value")
-    
-    if ("custom name" %in% names(metadata)) {
-      metadata <- metadata %>% select(-"custom name")
-    }
-
-    if ("coords" %in% names(metadata)) {
-      if (TRUE %in% grepl(",", metadata$coords)) {
-         metadata <- metadata %>%
-           separate(coords, c("lat", "lon"), ", ")
-      } else {
-        metadata <- metadata %>%
-          separate(coords, c("lat", "lon"), " ")
-      }
-    }
-
-    # fix coords
-    if (TRUE %in% grepl("S", metadata$lat)) {
-      metadata$lat <- gsub("S", "", metadata$lat)
-      metadata <- metadata %>% mutate(lat = glue("-{metadata$lat}"))
-    } else if (TRUE %in% grepl("N", metadata$lat)) {
-      metadata$lat <- metadata$lat %>%
-        gsub("N", "", .) 
-        # as.double()
-    }
-    
-    if (TRUE %in% grepl("E", metadata$lon)) {
-      metadata$lon <- gsub("E", "", metadata$lon)
-      metadata <- metadata %>% mutate(lon = glue("-{metadata$lon}"))
-    } else if (TRUE %in% grepl("W", metadata$lon)) {
-      metadata$lon <- metadata$lon %>% 
-        gsub("W", "", .) 
-        # as.double()
-    }
-      
-    metadata <- metadata %>%
-      mutate_all(list(~gsub(",", "", .))) %>% 
-      select(-"accuracy (m)")
- 
-  if ("X1" %in% colnames(metadata)) {
-    metadata <- metadata %>% select(-X1)
-  }
-
-  if (TRUE %in% grepl("ample", names(metadata))) {
-    metadata <- metadata %>%
-      rename(number_of_samples = grep("ample", names(metadata), value = T))
-  }
-
-  # remove non-numeric characters
-  metadata <- metadata %>% mutate(across(!`serial number`, as.numeric)) 
-  
-  # convert back to character for filling NAs
-  metadata <- metadata %>% 
-    mutate(across(everything(), as.character)) 
-  }
-  return(metadata)
-}
-```
-
-
-
-```{r warning=FALSE}
-# read all csv files in 'robolimpets' folder and combine data
+# read all csv files in 'robolimpets' folder and combine data in list column
+d_p2p <- tibble()
 d_p2p <- tibble(
   path     = paths,
   file     = basename(path),
   data     = map(path, read_tempcsv)) 
 
-metadata <- tibble(
-  path = paths
-)
+metadata <- tibble() 
 metadata <- map(d_p2p$path, read_metadata) %>% 
   bind_rows
 
@@ -189,449 +208,163 @@ for (i in 1:nrow(metadata)) {
   }
 }
 
-metadata <- metadata %>% mutate(across(!`serial number`, as.numeric))
 
+metadata <- metadata %>% 
+  mutate_at(vars(-`serial number`, -path, -zone), as.numeric) 
 
-meta_psites_sf <- metadata %>% 
+d_p2p <- metadata %>% 
+  left_join(d_p2p, by = c("path" = "path"), keep = F) %>% 
+  select(path, file, everything())
+
+psites_gdata_sf <- d_p2p %>% 
   st_as_sf(
     coords = c("lon", "lat"), remove = F,
     crs    = 4326) # geographic coordinate ref system
-View(meta_psites_sf)
 
-
-psites_joined <- st_join(
-  meta_psites_sf, 
+# df with geometry, attributes, data, etc.
+psites <- st_join(
+  psites_gdata_sf, 
   d_psites_sf %>% 
     rename(pgeometry = geometry), 
   join = st_nearest_feature) %>% 
-  left_join(d_p2p, by = ) # need to finish this -- by adding path col to d_p2p and joining by that
+  rename(
+    lat_logger = lat.x,
+    lon_logger = lon.x, 
+    lat_site   = lat.y,
+    lon_site   = lon.y)
 
-
-
-
-
-
-
-
-
-```
-
-```{r warning=FALSE}
-
-
-
-
-
-# copied from before:
-
-# convert d_p2p to sf
-d_p2p_sf <- d_p2p %>% 
-  drop_na() %>% # for now..
-  st_as_sf(coords = c("lat", "lon"), remove = F) %>% 
-  st_set_crs(4326) # problem with coords...not correct
-View(d_p2p_sf)
-
-leaflet(d_p2p_sf) %>% addTiles() %>%   addMarkers()
-
-
-# join 4 nearby sites by nearest feature
-# (sites that are both MARINe and p2p that we have data for)
-p2p_sites_joined <- st_join(
-  d_msites_sf, 
-  d_psites_sf %>% 
-    select(-country) %>% 
-    rename(pgeometry = geometry), 
-  join = st_nearest_feature)
-
-# function to convert sf to st_point 
-# & add sf geometry list column & coord ref sys
-xy2pt <- function(x, y){
-  st_point(c(x, y)) %>% 
-    st_sfc(crs = 4326)
+for (i in 1:nrow(psites)) {
+  psites[["data"]][[i]]$site <- psites$id[i]
+  if (is.na(psites[["data"]][[i]]$zone)) {
+    psites[["data"]][[i]]$zone <- psites$`serial number`[i]
+  }
 }
 
-# add MARINe & p2p geom columns,
-# then use to calc distance between sites in km
-sites_joined <- sites_joined %>% 
-  st_drop_geometry() %>% 
+``` 
+
+### smooth p2p gdata 
+
+```{r warning=FALSE}
+# split by site & zone/serial number combo for combining
+d_filtered <- split(psites[["data"]], list(psites$id, psites$zone), drop = T, sep = "_")
+
+dailyq <- list()
+
+for (i in 1:length(d_filtered)) {
+  num_loggers <- length(d_filtered[[i]])
+  site <- unique(d_filtered[[i]][[num_loggers]][["site"]])
+  zone <- unique(d_filtered[[i]][[num_loggers]][["zone"]])
+  site_zone_name <- glue("{site}_{zone}_dailyq")
+  d_filtered[[i]] <- d_filtered[[i]] %>% 
+    bind_rows %>% group_by(zone)
+  d_dailyq <- dailyQuantiles_gdata(d_filtered[[i]])
+  dailyq[[site_zone_name]] <- d_dailyq
+}
+
+# bind temps for all sites & zones
+d <- dailyq %>% 
+  bind_rows %>% 
   mutate(
-    geom_marine = map2(longitude, latitude, xy2pt),
-    geom_p2p    = map2(lon      , lat     , xy2pt),
-    dist_km     = map2_dbl(geom_marine, geom_p2p, st_distance) / 1000) %>% 
-  st_as_sf( 
-    coords = c("lon", "lat"), remove = F,
-    crs    = 4326)
-```
+    site = as.factor(site),
+    zone = as.factor(zone))
 
-
-
-
-
-
-
-```{r warning=FALSE}
-# For each site i, write csv of smoothed temp data for all zones
-for (i in 1:length(d$site)) { # for each site i
-
-  # smooth data
-  # d_dailyq <- dailyQuantilesData(d_p2p[["data"]][[i]])
-
+for (i in 1:length(levels(d$site))) { # for each site i
   
+  site <- levels(d$site)[i]
   
+  d_site <- d %>% 
+    filter(site == !!site) %>% 
+    ungroup() 
   
-  # Filter out avgs only
-  d_site_avg <- d_site %>% 
-    filter(metric == "temp_c_avg") %>% 
-    select(-site, -metric) %>% 
-    # mutate(
-    #   zone = factor(zone, zones, ordered = T)) %>% 
-    arrange(zone, day) %>% 
-    pivot_wider(day, names_from = zone, values_from = Temp_C) %>% 
-    arrange(day) 
-  
-  write_csv(
-    d_dailyq,
-    paste0(getwd(), "/data_smoothed/", site, ".csv"))
-  
-}
-```
-
-
-```{r warning=FALSE}
-# For each site i, write csv of smoothed temp data for all zones
-for (i in 1:length(d_p2p$path)) { # for each site i
-
-  # smooth data
-  d_dailyq <- dailyQuantilesData(d_p2p[["data"]][[i]])
-  
-  # Filter out avgs only
-  d_site_avg <- d_site %>% 
-    filter(metric == "temp_c_avg") %>% 
-    select(-site, -metric) %>% 
-    # mutate(
-    #   zone = factor(zone, zones, ordered = T)) %>% 
-    arrange(zone, day) %>% 
-    pivot_wider(day, names_from = zone, values_from = Temp_C) %>% 
-    arrange(day) 
-  
-  write_csv(
-    d_dailyq,
-    paste0(getwd(), "/data_smoothed/", site, ".csv"))
-  
-}
-
-
-
-
-p_dailyq <- list()
-p_dailyq[1] <- dailyQuantilesData(d_p2p[["data"]][[1]])
-
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## NEW SMOOTHING FNS
-```{r}
-colnames(sites_joined)
-
-h <- bind_rows(sites_joined, d_p2p)
-View(h)
-
-
-
-d_filtered <- split(sites_joined, list(sites_joined$site, sites_joined$zone), drop = T, sep = "_")
-
-d_p2p_filtered <- split(d_p2p, d_p2p$file, drop = T, sep = "_")
-
-View(d_p2p_filtered)
-
-
-
-# trying to make a datacombiner that's reproducible across ALL sites 
-
-# dataCombiner updated to use for both p2p & MARINe
-# don't need to run for d_p2p since already combined
-dataCombiner <- function(data_site_zone) {
-  
-  # store site and zone names
-  # for MARINe:
-  if ("site" %in% colnames(data_site_zone)) {
-    site <- unique(data_site_zone$site) 
+  if (length(c(levels(d_site$zone == 1)))) {
+    d_site <- d_site %>% 
+      filter(metric %in% c("temp_c_avg", "temp_c_min", "temp_c_max"))
+  }
+  else if (length(levels(d_site$zone)) > 1) {
+    d_site <- d_site %>% 
+      filter(metric == "temp_c_avg") %>% 
+      select(-site, -metric) %>% 
+      mutate(zone = factor(zone)) %>% 
+      arrange(zone, day) %>% 
+      pivot_wider(day, names_from = zone, values_from = Temp_C) %>% 
+      arrange(day)
   } 
-  if ("zone" %in% colnames(data_site_zone)) {
-    zone <- unique(data_site_zone$zone)
-  }
-  
-  # read temp file corresponding to each path name 
-  if (file_ext(data_site_zone$path) == "csv") {
-    temp_data <- bind_rows(lapply(data_site_zone$path, read_csv)) %>% 
-      rename(Temp_C = sst) %>% 
-      mutate(time   = parse_date_time(date, "y-m-d")) %>% 
-      select(-date)
-
-  } else {
-    temp_data <- bind_rows(lapply(data_site_zone$path, read_tsv)) %>% 
-      mutate(time = parse_date_time(Time_GMT, "m/d/y H:M")) %>%
-      select(-Time_GMT)
-  }
-  
-  temp_data <- temp_data %>% 
-    drop_na() %>% 
-    group_by(time) %>% 
-    summarize(Temp_C = mean(Temp_C)) %>% 
-    mutate(
-      site = if("site" %in% colnames(data_site_zone)) site else NA,
-      zone = if("zone" %in% colnames(data_site_zone)) zone else NA) %>% 
-    relocate(site)
-}
-  
-dailyQuantilesData <- function(data) {
-  
-  smoothed_data <- data %>% 
-    mutate(
-      day = lubridate::floor_date(time, unit = "day")) %>%
-    group_by(day) %>%
-    # distinct(day, .keep_all = T) %>% 
-    mutate(
-      temp_c_q10 = quantile(Temp_C, 0.1),
-      temp_c_q90 = quantile(Temp_C, 0.9),
-      temp_c_avg = mean(Temp_C),
-      temp_c_min = min(Temp_C),
-      temp_c_max = max(Temp_C)) %>% 
-    ungroup() %>% 
-    distinct(day, .keep_all = T) %>% 
-    select(-time, -Temp_C) %>% 
-    gather("metric", "Temp_C", c(-1, -2, -3))
-  # if ("zone" %in% colnames(smoothed_data)) {
-  #   select(-zone, zone)
-    # return(smoothed_data)
-  return(smoothed_data)
-  
-}
-
-dailyQuantilesData(d_p2p[["data"]][[9]])
-
-dailyQuantilesData()
-
-dailyQuantilesData(d_p2p[["data"]][[4]])
-
-
-data_1 <- d_p2p[["data"]][[9]] 
-# %>% 
-  # mutate(time = parse_date_time(time, "y-m-d H:M:S"))
-  #        
-
-smoothed_1 <- dailyQuantilesData(data_1)
-
-d_site_avg_1 <- smoothed_1 %>% 
-  pivot_wider(day, names_from = metric, values_from = Temp_C)
-
-
-x_smoothed_1 <- xts(select(d_site_avg_1, -day), order.by = d_site_avg_1$day)
-View(x_smoothed_1)
-
-dygraph(x_smoothed_1, main="Daily Temperature") %>%
-  dyAxis("y", label = " ") %>% 
-  dySeries(
-    c("temp_c_min",
-      "temp_c_avg",
-      "temp_c_max"),
-    label = "avg ºC",
-    color = "orangered") %>% 
-  dyOptions(
-    fillGraph = FALSE, fillAlpha = 0.4) %>%
-  dyRangeSelector() 
-
-# for (i in 1:length(levels(d$site))) { # for each site i
-
-  # site <- levels(d$site)[i]
-
-  # d_site <- smoothed_1 %>% 
-  #   filter(site == !!site) %>%
-  #   ungroup()
-  
-  # Filter out avgs
-  d_site_avg_1 <- smoothed_1 %>% 
-    filter(metric == "temp_c_avg") %>% 
-    select(-site, -metric) %>% 
-    mutate(
-      zone = factor(zone, zones, ordered = T)) %>% 
-    arrange(zone, day) %>% 
-    pivot_wider(day, names_from = zone, values_from = Temp_C) %>% 
-    arrange(day) 
-  
-  d_site_avg_1 <- smoothed_1 %>% 
-    pivot_wider(day, names_from = metric, values_from = Temp_C)
-  xts_1 <- 
-  
-  
-  
-  
   
   write_csv(
-    d_site_avg,
-    paste0(getwd(), "/data_smoothed/", site, ".csv"))
-  
+    d_site,
+    glue("{getwd()}/data_smoothed/{site}.csv"))
 }
 
-
-View(d_site_avg_1)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-View(smoothed_1)
-
-
-
-View(d_p2p_filtered[["data"]][[1]])
-
-dailyQuantilesData(d_p2p_filtered[[1]])
 ```
 
+# organize report output 
 
-### Smooth MARINe 
-
-
-
-
-### Smooth p2p (only 1 zone per site)
-
+### MARINe
 ```{r}
-# split by each unique site & zone combination
-# d_filtered <- split(d_sites, list(d_sites$site, d_sites$zone), drop = T, sep = "_")
-# d_filtered <- split(sites_joined, list(sites_joined$site, sites_joined$zone), drop = T, sep = "_")
+sites_joined_summarized <- sites_joined %>% 
+  group_by(site) %>% 
+  mutate(num_loggers = length(unique(msite))) %>% 
+  distinct(site, .keep_all = T) %>% 
+  select(site, location, id, name, region, country, org, num_loggers, lat, lon) 
 
-# loop through all site & zone combinations and store dailyq for each in a list
-dailyq_p2p <- list()
+msites_smoothed <- 
+  tibble(
+    path        = list.files(here(glue("{getwd()}/data_smoothed")),".*\\.csv$", recursive = T, full.names = T),
+    file        = basename(path),
+    site_id     = file %>% path_ext_remove()) %>% 
+  right_join(
+    sites_joined_summarized,
+    by = c("site_id" = "id"), copy = F, keep = F) %>% 
+  select(site_id, name, everything()) %>% 
+  rename(id = site_id)
 
+write_csv(msites_smoothed, glue("{getwd()}/data_smoothed/msites_smoothed.csv"))
 
+# read metadata back in
+m_info <- read_csv(here::here("data_smoothed/msites_smoothed.csv"))
 
-# don't forget to exclude metadata (last logger)
-# & look at folder names to access real site names (instead of just serial nums)
-
-
-for (i in 1:(nrow(d_p2p) - 1){ # i = 1
-  
-
-  # d_site_zone <- dataCombiner(data_site_zone = d_p2p[[i]])
-  
-  
-  
-  # get site and zone names
-  site <- path_ext_remove(d_p2p$file)
-  site_zone <- site
-  
-  # site <- unique(d_filtered[[i]][["site"]])
-  
-  
-  # if ("zone" %in% colnames(d_filtered[[i]])) {
-  #   zone <- unique(d_filtered[[i]][["zone"]])
-  #   site_zone <-  paste0(site, "_", zone)
-  # } else {
-  #   zone <- ""
-  #   site_zone <- site
-  # }
-  
-  # smooth data
-  d_dailyq <- dailyQuantilesData(d_p2p$data)
-  
-  
-  
-  
-  
-  
-  # x_dailyq <- dailyQuantiles_xts(d_site_zone)
-  
-  # assign global names to local objects
-  stringname <- paste0(site_zone, "_dailyq")
-  
-  dailyq[[stringname]] <- d_dailyq
-  
-  # will write csv later once bound by site
-  # write_csv(
-  #   d_dailyq,
-  #   path = paste0(getwd(), "/data_smoothed/", stringname, ".csv"))
- 
+# write yaml metadata files
+for (i in 1:nrow(m_info)) {
+  m_meta <- m_info %>% 
+    filter(id == m_info$id[i]) 
+  yaml_m_meta <- as.yaml(list(m_meta))
+  write_yaml(
+    yaml_m_meta,
+    glue("{getwd()}/data_smoothed/{m_info$id[i]}_meta.yml"),
+    fileEncoding = "UTF-8")
 }
-
-
-
-
-
-
-# loop through all site & zone combinations and store dailyq for each in a list
-dailyq_p2p <- list()
-
-for (i in 1:length(d_filtered)){ # i = 1
-  
-  # combine data for all zones of each site
-  d_site_zone <- dataCombiner(data_site_zone = d_filtered[[i]])
-  
-  # get site and zone names
-  site <- unique(d_filtered[[i]][["site"]])
-  if ("zone" %in% colnames(d_filtered[[i]])) {
-    zone <- unique(d_filtered[[i]][["zone"]])
-    site_zone <-  paste0(site, "_", zone)
-  } else {
-    zone <- ""
-    site_zone <- site
-  }
-  
-  # smooth data
-  d_dailyq <- dailyQuantilesData(d_site_zone)
-  # x_dailyq <- dailyQuantiles_xts(d_site_zone)
-  
-  # assign global names to local objects
-  stringname <- paste0(site_zone, "_dailyq")
-  
-  dailyq[[stringname]] <- d_dailyq
-  
-  # will write csv later once bound by site
-  # write_csv(
-  #   d_dailyq,
-  #   path = paste0(getwd(), "/data_smoothed/", stringname, ".csv"))
- 
-}
-
 ```
 
+### p2p gdata
+```{r}
+psites_summarized <- psites %>% 
+  mutate(num_sites = length(unique(id))) %>% 
+  group_by(id) %>% 
+  mutate(num_loggers = length(unique(`serial number`))) %>% 
+  distinct(id, .keep_all = T) %>% 
+  select(id, name, country, org, number_of_samples, num_loggers, lat_site, lon_site)
+  
+psites_smoothed <- 
+  tibble(
+    path = list.files(glue("{getwd()}/data_smoothed"), ".*\\.csv$", recursive = T, full.names = T),
+    file = basename(path),
+    id = file %>% path_ext_remove()) %>% 
+  right_join(psites_summarized, by = c("id" = "id"), copy = F, keep = F) %>% 
+  select(id, name, everything())
 
+write_csv(psites_smoothed, glue("{getwd()}/data_smoothed/psites_smoothed.csv"))
 
+# read metadata back in
+p2p_info <- read_csv(here::here("data_smoothed/psites_smoothed.csv"))
 
-
-
-
-
+# write yaml metadata files
+for (i in 1:nrow(p2p_info)) {
+  p2p_meta <- p2p_info %>% 
+    filter(id == p2p_info$id[i]) 
+  yaml_p2p_meta <- as.yaml(list(p2p_meta))
+  write_yaml(
+    yaml_p2p_meta,
+    glue("{getwd()}/data_smoothed/{p2p_info$id[i]}_meta.yml"),
+    fileEncoding = "UTF-8")
+}
+```

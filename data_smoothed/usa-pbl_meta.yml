@@ -1,0 +1,14 @@
+|
+  - id: usa-pbl
+    name: Piedras Blancas
+    path: /Users/cdobbelaere/Documents/robomussels/intertidal-temps/data_smoothed/usa-pbl.csv
+    file: usa-pbl.csv
+    site: USCAPD
+    location: Piedras
+    region: California
+    country: USA
+    org: '[MARINe](https://marine.ucsc.edu/sitepages/piedrasblancas.html)'
+    num_loggers: 19.0
+    lat: 35.6649284
+    lon: -121.28699
+    geometry: c(-121.28699, 35.66492844)

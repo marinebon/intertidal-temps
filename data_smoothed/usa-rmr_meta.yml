@@ -1,0 +1,14 @@
+|
+  - id: usa-rmr
+    name: Rancho Marino
+    path: /Users/cdobbelaere/Documents/robomussels/intertidal-temps/data_smoothed/usa-rmr.csv
+    file: usa-rmr.csv
+    site: USCACA
+    location: Cambria
+    region: California
+    country: USA
+    org: '[MARINe](https://marine.ucsc.edu/sitepages/cambria.html)'
+    num_loggers: 9.0
+    lat: 35.5224419
+    lon: -121.073
+    geometry: c(-121.073, 35.52244186)
