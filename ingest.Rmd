@@ -13,12 +13,6 @@ editor_options:
 knitr::opts_chunk$set(echo = T, message = F, warning = F)
 ```
 
-## TODO
-
-1. PROBLEM. Data is too big for simple interactive time-series plot (ie dygraphs) if on same Rmd output html page. The folder of *.csv's [robomusseldata20201030 - Google Drive](https://drive.google.com/drive/u/3/folders/1kzjZ72vFxRGsafTgCCzq6cXIhQ1GYQa3) contains 317 files totalling 236 MB. SOLUTION(s):
-    1. Read into SQLite database and show as Shiny app.
-
-
 # load functions
 ```{r}
 source(here::here("functions.R"))
@@ -27,7 +21,6 @@ source(here::here("functions.R"))
 # MARINe sites
 
 ### read in site data
-
 ```{r}
 # get [Pole to Pole](https://marinebon.org/p2p) sites & convert to sf 
 d_psites <- read_csv(here::here("data/p2p_sites.csv"))
@@ -108,17 +101,17 @@ for (i in 1:length(d_filtered)){ # i = 1
   site <- unique(d_filtered[[i]][["id"]])
   if ("zone" %in% colnames(d_filtered[[i]])) {
     zone <- unique(d_filtered[[i]][["zone"]])
-    site_zone <-  paste0(site, "_", zone)
+    site_zone <-  glue("{site}_{zone}")
   } else {
     zone <- ""
     site_zone <- site
   }
+  message(glue("site_zone: {site_zone}"))
   
   # smooth data
   d_dailyq <- dailyQuantilesData(d_site_zone)
   
-  # assign global names to local objects
-  stringname <- paste0(site_zone, "_dailyq")
+  stringname <- glue("{site_zone}_dailyq")
   
   # populate dailyq list
   dailyq[[stringname]] <- d_dailyq
@@ -132,8 +125,10 @@ zones <- c("Low", "Lower-Mid", "Mid", "Upper-Mid", "High")
 d <- dailyq %>% 
   bind_rows %>% 
   mutate(
-    site = as.factor(site),
-    zone = factor(zone, levels = zones, ordered = T))
+    site   = as.factor(site),
+    zone   = factor(zone, levels = zones, ordered = T),
+    metric = as.factor(metric),
+    Temp_C = as.numeric(Temp_C))
  
 
 # write smoothed avg temp data for each site to a unique csv
@@ -150,24 +145,24 @@ for (i in 1:length(levels(d$site))) { # for each site i
     filter(metric == "temp_c_avg") %>% 
     select(-site, -metric) %>% 
     mutate(
-      zone = factor(zone, zones, ordered = T)) %>% 
+      zone = factor(zone, zones, ordered = T),
+      Temp_C = as.numeric(Temp_C)) %>% 
     arrange(zone, day) %>% 
     pivot_wider(day, names_from = zone, values_from = Temp_C) %>% 
-    arrange(day) 
+    arrange(day)
   
   write_csv(
     d_site_avg,
-    glue("{getwd()}/data_smoothed/{site}.csv"))
+    here(glue("data_smoothed/{site}.csv")))
   
 }
-
 ```
 
 # p2p sites
 
-### read p2p gdata
-```{r}
-#### prep directories
+### read p2p gdata and metadata
+```{r warning=FALSE}
+# prep directories
 dir_p2p_robo <-
   case_when(
     user == "bbest"       ~ "/Volumes/GoogleDrive/My Drive/projects/mbon-p2p/Robolimpets",
@@ -177,10 +172,8 @@ paths <- list.files(
   dir_p2p_robo, ".*\\.csv$", 
   recursive = T, full.names = T,
   include.dirs = T) # 14 CSVs
-```
 
-### actually read in data and metadata
-```{r warning=FALSE}
+
 # read all csv files in 'robolimpets' folder and combine data in list column
 d_p2p <- tibble()
 d_p2p <- tibble(
@@ -195,12 +188,12 @@ metadata <- map(d_p2p$path, read_metadata) %>%
 # fill NAs
 for (i in 1:nrow(metadata)) {
   for (j in 1:ncol(metadata)) {
-    # if there's an NA
+    # if there's an NA,
     if (is.na(metadata[i, j])) {
       # find if serial number matches any other serial number
       if (TRUE %in% grepl(as.character(metadata$`serial number`[i]), metadata$`serial number`)) {
         row <- (grep(as.character(metadata$`serial number`[i]), metadata$`serial number`))[1]
-        # replace that row's NAs with the value of the other rows
+        # replace that row's NAs with the value of the associated row(s)
         metadata[i, j] <- metadata[row, j]
       }
     }
@@ -238,11 +231,9 @@ for (i in 1:nrow(psites)) {
     psites[["data"]][[i]]$zone <- psites$`serial number`[i]
   }
 }
-
 ``` 
 
 ### smooth p2p gdata 
-
 ```{r warning=FALSE}
 # split by site & zone/serial number combo for combining
 d_filtered <- split(psites[["data"]], list(psites$id, psites$zone), drop = T, sep = "_")
@@ -254,9 +245,10 @@ for (i in 1:length(d_filtered)) {
   site <- unique(d_filtered[[i]][[num_loggers]][["site"]])
   zone <- unique(d_filtered[[i]][[num_loggers]][["zone"]])
   site_zone_name <- glue("{site}_{zone}_dailyq")
+  message(glue("site_zone: {site_zone}"))
   d_filtered[[i]] <- d_filtered[[i]] %>% 
     bind_rows %>% group_by(zone)
-  d_dailyq <- dailyQuantiles_gdata(d_filtered[[i]])
+  d_dailyq <- dailyQuantilesData(d_filtered[[i]])
   dailyq[[site_zone_name]] <- d_dailyq
 }
 
@@ -266,6 +258,7 @@ d <- dailyq %>%
   mutate(
     site = as.factor(site),
     zone = as.factor(zone))
+
 
 for (i in 1:length(levels(d$site))) { # for each site i
   
@@ -283,7 +276,9 @@ for (i in 1:length(levels(d$site))) { # for each site i
     d_site <- d_site %>% 
       filter(metric == "temp_c_avg") %>% 
       select(-site, -metric) %>% 
-      mutate(zone = factor(zone)) %>% 
+      mutate(
+        zone = factor(zone),
+        Temp_C = as.numeric(Temp_C)) %>% 
       arrange(zone, day) %>% 
       pivot_wider(day, names_from = zone, values_from = Temp_C) %>% 
       arrange(day)
@@ -293,7 +288,6 @@ for (i in 1:length(levels(d$site))) { # for each site i
     d_site,
     glue("{getwd()}/data_smoothed/{site}.csv"))
 }
-
 ```
 
 # organize report output 
@@ -322,13 +316,14 @@ write_csv(msites_smoothed, glue("{getwd()}/data_smoothed/msites_smoothed.csv"))
 
 # read metadata back in
 m_info <- read_csv(here::here("data_smoothed/msites_smoothed.csv"))
-
+    
 # write yaml metadata files
-for (i in 1:nrow(m_info)) {
+for (id in m_info$id) {
+  message(glue("id: {id}"))
   m_info %>% 
-    filter(id == m_info$id[i]) %>% 
+    filter(id == !!id) %>% 
     write_yaml(
-      here(glue("data_smoothed/{m_info$id[i]}_meta.yml")),
+      here(glue("data_smoothed/{id}_meta.yml")),
       fileEncoding = "UTF-8")
 }
 ```
@@ -365,5 +360,4 @@ for (id in p2p_info$id) {  # id = p2p_info$id[1]
       here(glue("data_smoothed/{id}_meta.yml")),
       fileEncoding = "UTF-8")
 }
-
 ```

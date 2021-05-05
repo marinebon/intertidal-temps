@@ -16,13 +16,8 @@ source(here::here("functions.R"))
 ### In situ temperature
 
 ```{r}
-site_id <- "usa-bml"
-
-# TODO: write metadata in ingest.Rmd
-# meta$provider = "MARINe network"
-# meta$contributers = c("Joe", "Jane")
-# meta$num_loggers = 6
-# write_yaml(meta, meta_yml)
+site_id <- "bra-arraialdocabo-fortaleza"
+# site_id <- "usa-rmr"
 
 temp_csv <- here(glue("data_smoothed/{site_id}.csv"))
 meta_yml <- here(glue("data_smoothed/{site_id}_meta.yml"))

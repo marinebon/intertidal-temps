@@ -31,13 +31,12 @@ xy2pt <- function(x, y){
     st_sfc(crs = 4326)
 }
 
-
 # find where metadata ends for gdata files
 find_skip <- function(file, pattern, n = 20) { 
   min(grep(pattern, read_lines(file, n_max = n)))
 }
 
-# function to read temp csv files for gdata
+# gdata: read temp csv files
 read_tempcsv <- function(path) {
   data <- tibble(
     read_csv(
@@ -70,11 +69,10 @@ read_tempcsv <- function(path) {
   } else data$zone <- NA
   
   if ("sensor" %in% colnames(data)) {data <- data %>% select(-sensor)}
-  return(data)
+  data
 }
 
-
-# read and clean metadata for gdata
+# gdata: read and clean metadata for gdata
 read_metadata <- function(path) { 
   
   n_start <- find_skip(file = path, pattern = "^time,")
@@ -156,11 +154,11 @@ read_metadata <- function(path) {
     metadata$zone <- "exposed"
   } else metadata$zone <- metadata$`serial number`
   
-  return(metadata)
+  metadata
 }
 
 
-# combine data files for MARINe sites
+# MARINe: combine data files by sites
 dataCombiner <- function(data_site_zone) {
   # message("reading in sites")
   
@@ -194,9 +192,10 @@ dataCombiner <- function(data_site_zone) {
       zone = if("zone" %in% colnames(data_site_zone)) zone else NA) %>% 
     relocate(site)
   
-  return(temp_data)
+  temp_data
 }
 
+# smooth temp data by day
 dailyQuantilesData <- function(data) {
   data <- data %>% 
     mutate(
@@ -219,52 +218,20 @@ dailyQuantilesData <- function(data) {
       gather("metric", "Temp_C", c(-1, -2, -3, -4)) %>% 
       select(-zone, zone)
   }
-    
-  return(data)
-}
-
-dailyQuantiles_gdata <- function(data) {
-  data <- data %>% 
-    # group_by(zone) %>%
-    # mutate(Temp_C = mean(as.numeric(Temp_C))) %>%
-    # ungroup() %>%
-    mutate(
-      day = floor_date(time, unit = "day")) %>%
-    group_by(day) %>%
-    distinct(day, .keep_all = T) %>% 
-    mutate(
-      temp_c_q10 = quantile(Temp_C, 0.1),
-      temp_c_q90 = quantile(Temp_C, 0.9),
-      temp_c_avg = mean(Temp_C),
-      temp_c_min = min(Temp_C),
-      temp_c_max = max(Temp_C)) %>% 
-    select(-time, -Temp_C) 
-  if (!("path" %in% colnames(data))) {
-    data <- data %>% 
-      gather("metric", "Temp_C", c(-1, -2, -3)) %>% 
-      select(-zone, zone)
-  } else if ("path" %in% colnames(data)) {
-    data <- data %>% 
-      gather("metric", "Temp_C", c(-1, -2, -3, -4)) %>% 
-      select(-zone, zone)
-  }
-  
   data
 }
 
-
-
-
-# read in smoothed csv and convert to xts for dygraphs
+# final report: read in smoothed csv and convert to xts for dygraph plotting
 get_xts <- function(path) {
     d_smoothed <- read_csv(path) %>%
       mutate(
         day = parse_date_time(day, "ymd")) %>%
       mutate_at(vars(-1), funs(as.numeric))
     x_smoothed <- xts(select(d_smoothed, -day), order.by = d_smoothed$day)
-    return(x_smoothed)
+    x_smoothed
 }
   
+# final report: plot dygraph from xts
 get_dygraph <- function(xts) {
   
   # map color palette to zone names
@@ -287,6 +254,6 @@ get_dygraph <- function(xts) {
       fillGraph = FALSE, fillAlpha = 0.4) %>%
     dyRangeSelector()
   
-  return(dygraph)
+  dygraph
 }
   
