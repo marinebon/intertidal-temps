@@ -93,7 +93,6 @@ sites_joined <- sites_joined %>%
 
 ### smooth MARINe sites 
 ```{r warning=FALSE}
-
 d_filtered <- split(sites_joined, list(sites_joined$id, sites_joined$zone), drop = T, sep = "_")
 
 # loop through all site & zone combinations and smooth 
