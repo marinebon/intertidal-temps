@@ -351,7 +351,7 @@ psites_smoothed <-
   right_join(psites_summarized, by = c("id" = "id"), copy = F, keep = F) %>% 
   select(id, name, everything()) %>% 
   select(-geometry, -path)
-
+ 
 write_csv(psites_smoothed, here(glue("data_smoothed/psites_smoothed.csv")))
 
 # read metadata back in

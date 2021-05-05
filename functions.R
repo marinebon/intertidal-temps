@@ -225,9 +225,9 @@ dailyQuantilesData <- function(data) {
 
 dailyQuantiles_gdata <- function(data) {
   data <- data %>% 
-    group_by(zone) %>% 
-    mutate(Temp_C = mean(Temp_C)) %>% 
-    ungroup() %>% 
+    # group_by(zone) %>% 
+    # mutate(Temp_C = mean(as.numeric(Temp_C))) %>% 
+    # ungroup() %>% 
     mutate(
       day = floor_date(time, unit = "day")) %>%
     group_by(day) %>%
