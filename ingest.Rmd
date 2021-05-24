@@ -241,14 +241,17 @@ d_filtered <- split(psites[["data"]], list(psites$id, psites$zone), drop = T, se
 dailyq <- list()
 
 for (i in 1:length(d_filtered)) {
-  num_loggers <- length(d_filtered[[i]])
-  site <- unique(d_filtered[[i]][[num_loggers]][["site"]])
-  zone <- unique(d_filtered[[i]][[num_loggers]][["zone"]])
+  
+  num_loggers    <- length(d_filtered[[i]])
+  site           <- unique(d_filtered[[i]][[num_loggers]][["site"]])
+  zone           <- unique(d_filtered[[i]][[num_loggers]][["zone"]])
   site_zone_name <- glue("{site}_{zone}_dailyq")
-  message(glue("site_zone: {site_zone}"))
-  d_filtered[[i]] <- d_filtered[[i]] %>% 
-    bind_rows %>% group_by(zone)
-  d_dailyq <- dailyQuantilesData(d_filtered[[i]])
+  
+  message(glue("site_zone: {site}_{zone}"))
+  
+  d_filtered[[i]] <- d_filtered[[i]] %>% bind_rows() %>% group_by(zone)
+  d_dailyq        <- dailyQuantilesData(d_filtered[[i]])
+  
   dailyq[[site_zone_name]] <- d_dailyq
 }
 
@@ -271,13 +274,12 @@ for (i in 1:length(levels(d$site))) { # for each site i
   if (length(c(levels(d_site$zone == 1)))) {
     d_site <- d_site %>% 
       filter(metric %in% c("temp_c_avg", "temp_c_min", "temp_c_max"))
-  }
-  else if (length(levels(d_site$zone)) > 1) {
+  } else if (length(levels(d_site$zone)) > 1) {
     d_site <- d_site %>% 
       filter(metric == "temp_c_avg") %>% 
       select(-site, -metric) %>% 
       mutate(
-        zone = factor(zone),
+        zone   = factor(zone),
         Temp_C = as.numeric(Temp_C)) %>% 
       arrange(zone, day) %>% 
       pivot_wider(day, names_from = zone, values_from = Temp_C) %>% 
@@ -286,7 +288,7 @@ for (i in 1:length(levels(d$site))) { # for each site i
   
   write_csv(
     d_site,
-    glue("{getwd()}/data_smoothed/{site}.csv"))
+    here(glue("data_smoothed/{site}.csv")))
 }
 ```
 

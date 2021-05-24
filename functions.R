@@ -36,16 +36,21 @@ find_skip <- function(file, pattern, n = 20) {
   min(grep(pattern, read_lines(file, n_max = n)))
 }
 
+
 # gdata: read temp csv files
 read_tempcsv <- function(path) {
+  
   data <- tibble(
     read_csv(
       path,
-      skip = (find_skip(file = path, pattern = "^time,") - 1))) %>% 
-    drop_na() 
+      skip = (find_skip(file = path, pattern = "^time,") - 1))) %>%
+    select(-any_of(contains("X"))) %>% 
+    drop_na()
+  
   if ("temp" %in% names(data)) {
     data <- data %>% rename(Temp_C = temp)
   }
+
   if (TRUE %in% grepl("-", data$time)) {
     data <- data %>% mutate(time = parse_date_time(time,"y-m-d H:M:S"))
   } else if (TRUE %in% grepl("/", data$time)) {
@@ -69,6 +74,7 @@ read_tempcsv <- function(path) {
   } else data$zone <- NA
   
   if ("sensor" %in% colnames(data)) {data <- data %>% select(-sensor)}
+  
   data
 }
 
