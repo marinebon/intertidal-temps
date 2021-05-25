@@ -197,35 +197,75 @@ dataCombiner <- function(data_site_zone) {
       site = if("id" %in% colnames(data_site_zone)) site else NA,
       zone = if("zone" %in% colnames(data_site_zone)) zone else NA) %>% 
     relocate(site)
-  
   temp_data
 }
 
+
 # smooth temp data by day
 dailyQuantilesData <- function(data) {
+
+  zone <- unique(data$zone)
+  
+  # temp_c_q10 <- glue("temp_c_q10_{zone}")
+  # temp_c_q90 <- glue("temp_c_q90_{zone}")
+  temp_c_avg <- glue("temp_c_avg_{zone}")
+  temp_c_min <- glue("temp_c_min_{zone}")
+  temp_c_max <- glue("temp_c_max_{zone}")
+  
   data <- data %>% 
-    mutate(
-      day = floor_date(time, unit = "day")) %>%
+    mutate(day = floor_date(time, unit = "day")) %>%
     group_by(day) %>%
-    distinct(day, .keep_all = T) %>% 
+
     mutate(
-      temp_c_q10 = quantile(Temp_C, 0.1),
-      temp_c_q90 = quantile(Temp_C, 0.9),
-      temp_c_avg = mean(Temp_C),
-      temp_c_min = min(Temp_C),
-      temp_c_max = max(Temp_C)) %>% 
-    select(-time, -Temp_C) 
+      # !!temp_c_q10 := quantile(Temp_C, 0.1),
+      # !!temp_c_q90 := quantile(Temp_C, 0.9),
+      !!temp_c_avg := mean(Temp_C),
+      !!temp_c_min := min(Temp_C),
+      !!temp_c_max := max(Temp_C)) %>% 
+    ungroup() %>% 
+    select(-time, -Temp_C) %>% 
+    distinct(day, .keep_all = T)
+  
+  # for MARINE / 3+ zones: no dySeries so can gather metrics
   if (!("path" %in% colnames(data))) {
     data <- data %>% 
       gather("metric", "Temp_C", c(-1, -2, -3)) %>% 
       select(-zone, zone)
-  } else if ("path" %in% colnames(data)) {
-    data <- data %>% 
-      gather("metric", "Temp_C", c(-1, -2, -3, -4)) %>% 
+  } 
+  
+  else if ("path" %in% colnames(data)) {
+    data <- data %>%
+      gather("metric", "Temp_C", c(-1, -2, -3, -4)) %>%
       select(-zone, zone)
-  }
+  } 
   data
 }
+
+# dailyQuantilesData <- function(data) {
+#   zone <- data$zone
+#   data <- data %>% 
+#     mutate(
+#       day = floor_date(time, unit = "day")) %>%
+#     group_by(day) %>%
+#     distinct(day, .keep_all = T) %>% 
+#     mutate(
+#       temp_c_q10 = quantile(Temp_C, 0.1),
+#       temp_c_q90 = quantile(Temp_C, 0.9),
+#       temp_c_avg = mean(Temp_C),
+#       temp_c_min = min(Temp_C),
+#       temp_c_max = max(Temp_C)) %>% 
+#     select(-time, -Temp_C) 
+#   if (!("path" %in% colnames(data))) {
+#     data <- data %>% 
+#       gather("metric", "Temp_C", c(-1, -2, -3)) %>% 
+#       select(-zone, zone)
+#   } else if ("path" %in% colnames(data)) {
+#     data <- data %>% 
+#       gather("metric", "Temp_C", c(-1, -2, -3, -4)) %>% 
+#       select(-zone, zone)
+#   }
+#   data
+# }
 
 # final report: read in smoothed csv and convert to xts for dygraph plotting
 get_xts <- function(path) {
@@ -242,24 +282,51 @@ get_dygraph <- function(xts) {
   
   # map color palette to zone names
   pal  <- c("#3D2C9A", "#3E98C5", "#4A9A78", "#F7BD33", "#D74B00")
-  zone_colors <- setNames(pal, names(xts)) 
   
-  # plot
-  dygraph <- dygraph(xts, main = "Daily Temperature") %>%
-    dyHighlight(
-      highlightCircleSize = 5, 
-      highlightSeriesBackgroundAlpha = 0.2,
-      hideOnMouseOut = TRUE) %>%
-    dyOptions(
-      # use only colors corresponding to zones that 
-      # exist in the site's xts data
-      colors = as.character(
-        zone_colors[names(xts)]),
-      connectSeparatedPoints = FALSE) %>% 
-    dyOptions(
-      fillGraph = FALSE, fillAlpha = 0.4) %>%
-    dyRangeSelector()
+  # MARINE: no min/max ribbon
+  if ("Low" %in% names(xts)) {
+    zone_colors <- setNames(pal, names(xts)) 
+    
+    # plot
+    dygraph <- dygraph(xts, main = "Daily Temperature") %>%
+      dyHighlight(
+        highlightCircleSize = 5, 
+        highlightSeriesBackgroundAlpha = 0.2,
+        hideOnMouseOut = TRUE) %>%
+      dyOptions(
+        # use only colors corresponding to zones that 
+        # exist in the site's xts data
+        colors = as.character(
+          zone_colors[names(xts)]),
+        connectSeparatedPoints = FALSE) %>% 
+      dyOptions(
+        fillGraph = FALSE, fillAlpha = 0.4) %>%
+      dyRangeSelector()
   
+  # p2p non-MARINe sites
+  } else if (!("Low" %in% names(xts))) {
+    dygraph <- dygraph(xts, main = "Daily Temperature") %>% 
+      dySeries(
+        c(mins[1], avgs[1], maxes[1]), 
+        label = glue("{zones[1]}")) %>% 
+      dySeries(
+        c(mins[2], avgs[2], maxes[2]),
+        label = glue("{zones[2]}")) %>% 
+      dyHighlight(
+        highlightCircleSize = 5,
+        highlightSeriesBackgroundAlpha = 0.2,
+        hideOnMouseOut = TRUE) %>%
+      dyOptions(
+        # use only colors corresponding to zones that 
+        # exist in the site's xts data
+        # colors = as.character(
+        #   zone_colors[names(xts)]),
+        connectSeparatedPoints = FALSE) %>% 
+      dyOptions(
+        fillGraph = FALSE, fillAlpha = 0.4) %>%
+      dyRangeSelector()
+  }
+
   dygraph
 }
   

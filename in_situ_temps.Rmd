@@ -17,8 +17,9 @@ source(here::here("functions.R"))
 
 ```{r}
 # site_id <- "bra-arraialdocabo-fortaleza"
-# site_id <- "usa-rmr"
-site_id <- "col-islagorgona-laventana"
+# site_id <- "bra-costadasalgas-gramute"
+# site_id <- "usa-hop"
+site_id <- "col-islagorgona-laventana" # new site
 
 temp_csv <- here(glue("data_smoothed/{site_id}.csv"))
 meta_yml <- here(glue("data_smoothed/{site_id}_meta.yml"))
@@ -27,6 +28,16 @@ site_url <- glue("https://raw.githubusercontent.com/marinebon/p2p/master/data/in
 meta <- read_yaml(meta_yml)
 d    <- read_csv(temp_csv)
 x    <- xts(select(d, -day), order.by = d$day)
+
+if (glue("{site_id}_zones.txt") %in% list.files(path = here("data_smoothed"))) {
+  zones <- read_lines(here(glue("data_smoothed/{site_id}_zones.txt")))
+  mins  <- glue("temp_c_min_{zones}")
+  avgs  <- glue("temp_c_avg_{zones}")
+  maxes <- glue("temp_c_max_{zones}")
+}
+
+
+
 
 # output timeseries plot
 get_dygraph(x)

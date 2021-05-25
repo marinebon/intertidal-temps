@@ -145,7 +145,7 @@ for (i in 1:length(levels(d$site))) { # for each site i
     filter(metric == "temp_c_avg") %>% 
     select(-site, -metric) %>% 
     mutate(
-      zone = factor(zone, zones, ordered = T),
+      zone   = factor(zone, zones, ordered = T),
       Temp_C = as.numeric(Temp_C)) %>% 
     arrange(zone, day) %>% 
     pivot_wider(day, names_from = zone, values_from = Temp_C) %>% 
@@ -259,36 +259,31 @@ for (i in 1:length(d_filtered)) {
 d <- dailyq %>% 
   bind_rows %>% 
   mutate(
-    site = as.factor(site),
-    zone = as.factor(zone))
+    site   = as.factor(site),
+    zone   = as.factor(zone),
+    metric = as.factor(metric))
 
+# write smoothed temp data to csv and zones to txt if relevant
+for (i in 1:length(levels(d$site))) { # for each site 
 
-for (i in 1:length(levels(d$site))) { # for each site i
-  
   site <- levels(d$site)[i]
-  
+
   d_site <- d %>% 
     filter(site == !!site) %>% 
     ungroup() 
   
-  if (length(c(levels(d_site$zone == 1)))) {
-    d_site <- d_site %>% 
-      filter(metric %in% c("temp_c_avg", "temp_c_min", "temp_c_max"))
-  } else if (length(levels(d_site$zone)) > 1) {
-    d_site <- d_site %>% 
-      filter(metric == "temp_c_avg") %>% 
-      select(-site, -metric) %>% 
-      mutate(
-        zone   = factor(zone),
-        Temp_C = as.numeric(Temp_C)) %>% 
-      arrange(zone, day) %>% 
-      pivot_wider(day, names_from = zone, values_from = Temp_C) %>% 
-      arrange(day)
-  } 
+  zones <- unique(d_site$zone)
+
+  d_site <- d_site %>% 
+    select(-site, -zone, -path) %>% 
+    mutate(Temp_C = as.numeric(Temp_C)) %>%
+    arrange(day) %>% 
+    pivot_wider(day, names_from = metric, values_from = Temp_C) 
   
-  write_csv(
-    d_site,
-    here(glue("data_smoothed/{site}.csv")))
+  message(glue("writing csv for: {site}"))
+  
+  write_csv(d_site,  here(glue("data_smoothed/{site}.csv")))
+  write_lines(zones, here(glue("data_smoothed/{site}_zones.txt")))
 }
 ```
 
