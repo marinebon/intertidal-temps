@@ -181,7 +181,7 @@ d_p2p <- tibble(
   file     = basename(path),
   data     = map(path, read_tempcsv)) 
 
-metadata <- tibble() 
+metadata <- tibble()
 metadata <- map(d_p2p$path, read_metadata) %>% 
   bind_rows
 
@@ -199,7 +199,6 @@ for (i in 1:nrow(metadata)) {
     }
   }
 }
-
 
 metadata <- metadata %>% 
   mutate_at(vars(-`serial number`, -path, -zone), as.numeric) 

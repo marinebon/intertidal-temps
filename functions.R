@@ -11,6 +11,7 @@ librarian::shelf(
   # tidyverse / other
   fs, glue, here, lubridate, stringr, tidyverse, purrr, yaml)
 
+
 # paths & variables ----
 user <- Sys.info()[["user"]]
 
@@ -36,7 +37,6 @@ find_skip <- function(file, pattern, n = 20) {
   min(grep(pattern, read_lines(file, n_max = n)))
 }
 
-
 # gdata: read temp csv files
 read_tempcsv <- function(path) {
   
@@ -52,10 +52,12 @@ read_tempcsv <- function(path) {
   }
 
   if (TRUE %in% grepl("-", data$time)) {
-    data <- data %>% mutate(time = parse_date_time(time,"y-m-d H:M:S"))
+    data <- data %>% mutate(time = parse_date_time(time, "Y-m-d H:M:S")) 
+
   } else if (TRUE %in% grepl("/", data$time)) {
     data <- data %>% mutate(time = parse_date_time(time, "m/d/y H:M"))
   }
+  
   data <- data %>% 
     mutate(path = path)
   
@@ -74,9 +76,9 @@ read_tempcsv <- function(path) {
   } else data$zone <- NA
   
   if ("sensor" %in% colnames(data)) {data <- data %>% select(-sensor)}
-  
   data
 }
+
 
 # gdata: read and clean metadata for gdata
 read_metadata <- function(path) { 
@@ -86,10 +88,7 @@ read_metadata <- function(path) {
   # if metadata present:
   if (n_start != Inf) {
     
-    metadata <- tibble(
-      raw_data  = read_lines(
-        path,
-        n_max = n_start - 1)) 
+    metadata <- tibble(raw_data  = read_lines(path, n_max = n_start - 1)) 
     
     metadata <- metadata %>% 
       mutate_if(
@@ -125,7 +124,7 @@ read_metadata <- function(path) {
     if (TRUE %in% grepl("E", metadata$lon)) {
       metadata$lon <- gsub("E", "", metadata$lon)
       metadata <- metadata %>% mutate(lon = glue("-{metadata$lon}"))
-    } else if (TRUE %in% grepl("W", metadata$lon)) {
+    } else if (TRUE %in% grepl("W", metadata$lon)) {s
       metadata$lon <- metadata$lon %>% 
         gsub("W", "", .) 
     }
@@ -159,14 +158,13 @@ read_metadata <- function(path) {
   } else if (TRUE %in% grepl("exposed", metadata$path)) {
     metadata$zone <- "exposed"
   } else metadata$zone <- metadata$`serial number`
-  
   metadata
 }
 
 
 # MARINe: combine data files by sites
 dataCombiner <- function(data_site_zone) {
-  # message("reading in sites")
+  message("reading in sites")
   
   # site and zone names
   if ("id" %in% colnames(data_site_zone)) {
@@ -182,7 +180,6 @@ dataCombiner <- function(data_site_zone) {
       rename(Temp_C = sst) %>% 
       mutate(time   = parse_date_time(date, "y-m-d")) %>% 
       select(-date)
-    
   } else {
     temp_data <- bind_rows(lapply(data_site_zone$path, read_tsv)) %>% 
       mutate(time = parse_date_time(Time_GMT, "m/d/y H:M")) %>%
@@ -194,7 +191,7 @@ dataCombiner <- function(data_site_zone) {
     group_by(time) %>% 
     summarize(Temp_C = mean(Temp_C)) %>% 
     mutate(
-      site = if("id" %in% colnames(data_site_zone)) site else NA,
+      site = if("id" %in% colnames(data_site_zone))   site else NA,
       zone = if("zone" %in% colnames(data_site_zone)) zone else NA) %>% 
     relocate(site)
   temp_data
@@ -231,9 +228,7 @@ dailyQuantilesData <- function(data) {
     data <- data %>% 
       gather("metric", "Temp_C", c(-1, -2, -3)) %>% 
       select(-zone, zone)
-  } 
-  
-  else if ("path" %in% colnames(data)) {
+  } else if ("path" %in% colnames(data)) {
     data <- data %>%
       gather("metric", "Temp_C", c(-1, -2, -3, -4)) %>%
       select(-zone, zone)
@@ -270,8 +265,7 @@ dailyQuantilesData <- function(data) {
 # final report: read in smoothed csv and convert to xts for dygraph plotting
 get_xts <- function(path) {
     d_smoothed <- read_csv(path) %>%
-      mutate(
-        day = parse_date_time(day, "ymd")) %>%
+      mutate(day = parse_date_time(day, "ymd")) %>%
       mutate_at(vars(-1), funs(as.numeric))
     x_smoothed <- xts(select(d_smoothed, -day), order.by = d_smoothed$day)
     x_smoothed
@@ -317,16 +311,19 @@ get_dygraph <- function(xts) {
         highlightSeriesBackgroundAlpha = 0.2,
         hideOnMouseOut = TRUE) %>%
       dyOptions(
-        # use only colors corresponding to zones that 
-        # exist in the site's xts data
-        # colors = as.character(
-        #   zone_colors[names(xts)]),
         connectSeparatedPoints = FALSE) %>% 
       dyOptions(
         fillGraph = FALSE, fillAlpha = 0.4) %>%
       dyRangeSelector()
   }
-
   dygraph
 }
-  
+
+get_zone_info <- function(site_id) {
+  if (glue("{site_id}_zones.txt") %in% list.files(path = here("data_smoothed"))) {
+    zones <- read_lines(here(glue("data_smoothed/{site_id}_zones.txt")))
+    mins  <- glue("temp_c_min_{zones}")
+    avgs  <- glue("temp_c_avg_{zones}")
+    maxes <- glue("temp_c_max_{zones}")
+  }
+}
